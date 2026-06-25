@@ -3124,6 +3124,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
   const [sessionEndAd, setSessionEndAd] = useState(null);
+  const [pendingReview, setPendingReview] = useState(null);
 
   // Keep the active meeting in sync with the global sessions list (cloud polling refreshes attendance).
   useEffect(() => {
