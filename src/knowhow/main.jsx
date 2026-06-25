@@ -4009,7 +4009,7 @@ function CommunityPage({ user, posts = [], setPosts = () => {} }) {
           <h2>Community</h2>
           <p>Search discussions, open a board, or tap + to publish a new post.</p>
         </div>
-        <span className="pill muted">{filteredPosts.length}/{posts.length} posts</span>
+        
       </header>
 
       <div className="community-top-search card">
