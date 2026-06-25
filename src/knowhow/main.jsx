@@ -5398,7 +5398,7 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
             {adminUsers.map((person) => (
               <div className={`skill-row selectable ${selectedUserId === person.id ? 'selected' : ''}`} key={`${person.id}-${person.username}`} onClick={() => setSelectedUserId(person.id)}>
                 <div><strong>{person.fullName}</strong><span>@{person.username} • {person.role} • {person.status} • License: {person.license}</span></div>
-                <div className="actions inline"><button className="ghost" type="button">View</button><button className="danger" type="button">Suspend</button></div>
+                <div className="actions inline"><button className="ghost" type="button" onClick={(event) => { event.stopPropagation(); setProfileModalUserId(person.id); }}>View</button><button className="danger" type="button" onClick={(event) => event.stopPropagation()}>Suspend</button></div>
               </div>
             ))}
           </div>
