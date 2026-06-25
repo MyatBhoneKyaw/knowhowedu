@@ -3680,6 +3680,11 @@ function AdminLoginPage({ onSuccess }) {
     event.preventDefault();
     setLoading(true);
     setError('');
+    if (!form.email || !form.password) {
+      setError('Please enter both your admin email and password.');
+      setLoading(false);
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE}/admin/auth/login`, {
         method: 'POST',
@@ -3695,13 +3700,32 @@ function AdminLoginPage({ onSuccess }) {
         onSuccess('demo-admin');
         return;
       }
-      setError(data.message || 'Admin account only. Normal learner/teacher users cannot enter this portal.');
+      const serverMsg = (data && data.message) || '';
+      if (response.status === 400) {
+        setError(serverMsg || 'Email and password are required.');
+      } else if (response.status === 401) {
+        if (/invalid login credentials/i.test(serverMsg)) {
+          setError('Incorrect email or password. Double-check your admin credentials and try again.');
+        } else if (/email not confirmed/i.test(serverMsg)) {
+          setError('This email has not been confirmed yet. Please confirm your email before signing in.');
+        } else {
+          setError(serverMsg || 'Incorrect email or password.');
+        }
+      } else if (response.status === 403) {
+        setError('This account exists but does not have admin access. Ask an existing admin to grant you the admin role.');
+      } else if (response.status === 429) {
+        setError('Too many sign-in attempts. Please wait a moment and try again.');
+      } else if (response.status >= 500) {
+        setError('The admin service is temporarily unavailable. Please try again in a moment.');
+      } else {
+        setError(serverMsg || 'Unable to sign in. Please try again.');
+      }
     } catch (error) {
       if (form.email.toLowerCase() === 'admin@knowhow.test' && form.password === 'password123') {
         onSuccess('demo-admin');
         return;
       }
-      setError('Cannot reach admin API. Use the seeded admin account in demo mode.');
+      setError('Cannot reach the admin service. Check your internet connection and try again.');
     } finally {
       setLoading(false);
     }
