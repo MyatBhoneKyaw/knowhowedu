@@ -250,6 +250,16 @@ async function cloudReviewApplication(id, body) {
     .select('*')
     .maybeSingle();
   if (error) throw new Error(error.message);
+  // On approval, promote the applicant's role on their profile so the app
+  // recognizes them as a teacher (raw_role stores the granular role string).
+  if (data && body.status === 'approved') {
+    const nextRole = data.requested_role === 'teacher' ? 'teacher' : (data.requested_role || 'assistant_teacher');
+    const { error: roleErr } = await supabase
+      .from('profiles')
+      .update({ raw_role: nextRole })
+      .eq('id', data.user_id);
+    if (roleErr) throw new Error(roleErr.message);
+  }
   const { data: profile } = await supabase.from('profiles').select('id, full_name, username, email').eq('id', data.user_id).maybeSingle();
   return applicationRowToApi(data, profile);
 }
@@ -515,6 +525,18 @@ async function apiRequest(path, options = {}) {
   if (path === '/users/me/profile' && method === 'PATCH') return cloudUpdateProfile(body);
   if (path === '/users' && method === 'GET') return searchUsers(options.query);
   let r;
+  if (path === '/users/report' && method === 'POST') {
+    const uid = await requireUid();
+    const { data, error } = await supabase.from('user_reports').insert({
+      reporter_id: uid,
+      reported_user_id: body.reportedUserId || null,
+      reported_username: body.reportedUsername || null,
+      reported_full_name: body.reportedFullName || null,
+      reason: body.reason,
+      details: body.details,
+    }).select('*').maybeSingle();
+    return camel(ok(data, error));
+  }
   if ((r = m(/^\/users\/([^/]+)$/)) && method === 'GET') return getUserByUsername(r[1]);
 
   // Skills
@@ -639,6 +661,23 @@ async function adminApiRequest(path, options = {}) {
   }
   if (path === '/admin/transactions' && method === 'GET') {
     const { data, error } = await supabase.from('credit_transactions').select('*').order('created_at', { ascending: false }).limit(200);
+    return camel(ok(data, error));
+  }
+  if (path === '/admin/reports' && method === 'GET') {
+    const { data, error } = await supabase.from('user_reports').select('*').order('created_at', { ascending: false }).limit(200);
+    return camel(ok(data, error));
+  }
+  if ((r = m(/^\/admin\/reports\/([^/]+)$/)) && method === 'PATCH') {
+    const { data, error } = await supabase
+      .from('user_reports')
+      .update({
+        status: body?.status,
+        admin_note: body?.adminNote,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', r[1])
+      .select('*')
+      .maybeSingle();
     return camel(ok(data, error));
   }
 
@@ -2070,29 +2109,42 @@ function SearchPage({ user, people, posts, sessions, messages, setMessages, setP
     setProfileActionNotice(`Friend request sent to ${person.fullName}.`);
   }
 
-  function submitReport(person) {
+  async function submitReport(person) {
     if (!person || person.isCurrentUser) return;
     if (!String(reportDraft.details || '').trim()) {
       setProfileActionNotice('Please add report details before submitting.');
       return;
     }
-    const report = {
-      id: crypto.randomUUID(),
-      userId: person.id,
-      userName: person.fullName,
+    const payload = {
+      reportedUserId: person.isCloudUser ? person.id : null,
+      reportedUsername: person.username,
+      reportedFullName: person.fullName,
       reason: reportDraft.reason,
       details: reportDraft.details.trim(),
-      submittedAt: new Date().toISOString(),
-      status: 'Requested review',
     };
-    const existingReports = loadState('knowhow-profile-reports', []);
-    localStorage.setItem('knowhow-profile-reports', JSON.stringify([report, ...existingReports]));
+    try {
+      await apiRequest('/users/report', { method: 'POST', body: JSON.stringify(payload) });
+      setProfileActionNotice(`Report submitted for ${person.fullName}. The admin team will review it.`);
+    } catch (error) {
+      // Fall back to local cache so the user still gets feedback if offline / unauthenticated.
+      const report = {
+        id: crypto.randomUUID(),
+        userId: person.id,
+        userName: person.fullName,
+        reason: reportDraft.reason,
+        details: reportDraft.details.trim(),
+        submittedAt: new Date().toISOString(),
+        status: 'Requested review',
+      };
+      const existingReports = loadState('knowhow-profile-reports', []);
+      localStorage.setItem('knowhow-profile-reports', JSON.stringify([report, ...existingReports]));
+      setProfileActionNotice(`Report saved locally for ${person.fullName} (${error.message}).`);
+    }
     const nextReported = Array.from(new Set([...reportedUsers, person.id]));
     setReportedUsers(nextReported);
     localStorage.setItem('knowhow-reported-users', JSON.stringify(nextReported));
     setReportDraft({ reason: 'Spam or scam', details: '' });
     setShowReportForm(false);
-    setProfileActionNotice(`Report info submitted for ${person.fullName}.`);
   }
 
   const selectedPerson = selected?.person;
@@ -4354,6 +4406,29 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
   const [selectedApplicationId, setSelectedApplicationId] = useState(normalizedApplications[0]?.id);
   const [adminNote, setAdminNote] = useState('');
   const [adminNotice, setAdminNotice] = useState('');
+  const [reports, setReports] = useState([]);
+  const [reportsNotice, setReportsNotice] = useState('');
+
+  async function loadReports() {
+    try {
+      const data = await adminApiRequest('/admin/reports');
+      setReports(Array.isArray(data) ? data : []);
+      setReportsNotice('');
+    } catch (error) {
+      setReportsNotice(`Could not load reports: ${error.message}`);
+    }
+  }
+
+  useEffect(() => { loadReports(); }, []);
+
+  async function updateReportStatus(id, status) {
+    try {
+      await adminApiRequest(`/admin/reports/${id}`, { method: 'PATCH', body: JSON.stringify({ status, adminNote: '' }) });
+      await loadReports();
+    } catch (error) {
+      setReportsNotice(`Failed to update report: ${error.message}`);
+    }
+  }
   const selectedUser = adminUsers.find((item) => item.id === selectedUserId) || adminUsers[0];
   const selectedApplication = normalizedApplications.find((item) => item.id === selectedApplicationId) || normalizedApplications[0];
 
@@ -4508,6 +4583,32 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
             </>
           ) : <p className="muted-text">Select an application to review.</p>}
         </div>
+      </div>
+      <div className="card">
+        <div className="section-title"><h3>User Reports</h3><span className="pill muted">{reports.length} report(s)</span></div>
+        {reportsNotice && <div className="notice">{reportsNotice}</div>}
+        {reports.length === 0 ? (
+          <p className="muted-text">No user reports submitted yet.</p>
+        ) : (
+          <div className="list">
+            {reports.map((report) => (
+              <div className="skill-row" key={report.id}>
+                <div>
+                  <strong>{report.reportedFullName || report.reportedUsername || 'Unknown user'}</strong>
+                  <span>
+                    {report.reason} • {String(report.status || 'pending').toUpperCase()} • Submitted {String(report.createdAt || '').slice(0, 16)}
+                  </span>
+                  <p className="muted-text">{report.details}</p>
+                  {report.adminNote && <p className="muted-text"><em>Admin note: {report.adminNote}</em></p>}
+                </div>
+                <div className="actions inline">
+                  <button className="success" type="button" onClick={() => updateReportStatus(report.id, 'resolved')}>Mark Resolved</button>
+                  <button className="danger" type="button" onClick={() => updateReportStatus(report.id, 'dismissed')}>Dismiss</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="card">
         <h3>Session Monitoring</h3>

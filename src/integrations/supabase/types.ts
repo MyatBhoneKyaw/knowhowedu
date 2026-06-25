@@ -874,6 +874,51 @@ export type Database = {
           },
         ]
       }
+      user_reports: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          details: string
+          id: string
+          reason: string
+          reported_full_name: string | null
+          reported_user_id: string | null
+          reported_username: string | null
+          reporter_id: string
+          reviewed_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          details: string
+          id?: string
+          reason: string
+          reported_full_name?: string | null
+          reported_user_id?: string | null
+          reported_username?: string | null
+          reporter_id: string
+          reviewed_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          details?: string
+          id?: string
+          reason?: string
+          reported_full_name?: string | null
+          reported_user_id?: string | null
+          reported_username?: string | null
+          reporter_id?: string
+          reviewed_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
