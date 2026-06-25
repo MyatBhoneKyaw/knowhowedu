@@ -525,6 +525,18 @@ async function apiRequest(path, options = {}) {
   if (path === '/users/me/profile' && method === 'PATCH') return cloudUpdateProfile(body);
   if (path === '/users' && method === 'GET') return searchUsers(options.query);
   let r;
+  if (path === '/users/report' && method === 'POST') {
+    const uid = await requireUid();
+    const { data, error } = await supabase.from('user_reports').insert({
+      reporter_id: uid,
+      reported_user_id: body.reportedUserId || null,
+      reported_username: body.reportedUsername || null,
+      reported_full_name: body.reportedFullName || null,
+      reason: body.reason,
+      details: body.details,
+    }).select('*').maybeSingle();
+    return camel(ok(data, error));
+  }
   if ((r = m(/^\/users\/([^/]+)$/)) && method === 'GET') return getUserByUsername(r[1]);
 
   // Skills
