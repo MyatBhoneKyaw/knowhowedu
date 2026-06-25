@@ -3133,7 +3133,64 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
               </div>
             ))}
           </div>
+      </div>
+      <div className="card">
+        <div className="section-title">
+          <h3>Subscription Shop</h3>
+          <span className="pill muted">Current: {activePlan}{subState.expiresAt && activePlan !== 'Free' ? ` (until ${new Date(subState.expiresAt).toLocaleDateString()})` : ''}</span>
         </div>
+        <p className="muted-text">Pay with credits. Trial & Premium share the same perks (ad-free, reward boost).</p>
+        <div className="list">
+          {[
+            { name: 'Free', priceCredits: 0, durationDays: 0, note: 'Default plan' },
+            { name: 'Trial', priceCredits: 50, durationDays: 7, note: 'Once per month' },
+            { name: 'Premium', priceCredits: 100, durationDays: 30, note: '1 month access' },
+          ].map((plan) => {
+            const isActive = activePlan === plan.name;
+            const isTrial = plan.name === 'Trial';
+            const disabled = isActive || (isTrial && trialOnCooldown);
+            const label = plan.priceCredits === 0
+              ? (isActive ? 'Current' : 'Switch')
+              : (isTrial && trialOnCooldown ? `Available ${new Date(trialCooldownUntil).toLocaleDateString()}` : (isActive ? 'Active' : `Buy ${plan.priceCredits}c`));
+            const onClick = () => {
+              setWalletNotice('');
+              if (plan.priceCredits === 0) {
+                setSubState({ plan: 'Free', expiresAt: null, lastTrialAt: subState.lastTrialAt });
+                setWalletNotice('Switched to Free plan.');
+                return;
+              }
+              if (isTrial && trialOnCooldown) return;
+              if (wallet.current < plan.priceCredits) {
+                setWalletNotice(`Need ${plan.priceCredits} credits to activate ${plan.name}. You have ${wallet.current}.`);
+                return;
+              }
+              const nextWallet = normalizeWallet({
+                ...wallet,
+                current: Number((wallet.current - plan.priceCredits).toFixed(2)),
+                spent: Number(((wallet.spent || 0) + plan.priceCredits).toFixed(2)),
+              });
+              const nextUser = { ...user, wallet: nextWallet };
+              addTransaction('Subscription', `${plan.name} plan (${plan.durationDays} days)`, -plan.priceCredits, nextUser);
+              setSubState({
+                plan: plan.name,
+                expiresAt: Date.now() + plan.durationDays * 86400000,
+                lastTrialAt: isTrial ? Date.now() : subState.lastTrialAt,
+              });
+              setWalletNotice(`${plan.name} activated for ${plan.durationDays} days.`);
+            };
+            return (
+              <div className="skill-row" key={plan.name}>
+                <div>
+                  <strong>{plan.name}</strong>
+                  <span>{plan.priceCredits === 0 ? 'Free' : `${plan.priceCredits} credits`} • {plan.note}</span>
+                </div>
+                <button className={isActive ? 'ghost' : 'primary'} type="button" disabled={disabled} onClick={onClick}>{label}</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       </div>
       <details className="card credit-history-card" open>
         <summary className="section-title" style={{ cursor: 'pointer', listStyle: 'none' }}>
