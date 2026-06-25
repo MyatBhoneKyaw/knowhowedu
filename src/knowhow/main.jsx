@@ -4585,6 +4585,32 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
         </div>
       </div>
       <div className="card">
+        <div className="section-title"><h3>User Reports</h3><span className="pill muted">{reports.length} report(s)</span></div>
+        {reportsNotice && <div className="notice">{reportsNotice}</div>}
+        {reports.length === 0 ? (
+          <p className="muted-text">No user reports submitted yet.</p>
+        ) : (
+          <div className="list">
+            {reports.map((report) => (
+              <div className="skill-row" key={report.id}>
+                <div>
+                  <strong>{report.reportedFullName || report.reportedUsername || 'Unknown user'}</strong>
+                  <span>
+                    {report.reason} • {String(report.status || 'pending').toUpperCase()} • Submitted {String(report.createdAt || '').slice(0, 16)}
+                  </span>
+                  <p className="muted-text">{report.details}</p>
+                  {report.adminNote && <p className="muted-text"><em>Admin note: {report.adminNote}</em></p>}
+                </div>
+                <div className="actions inline">
+                  <button className="success" type="button" onClick={() => updateReportStatus(report.id, 'resolved')}>Mark Resolved</button>
+                  <button className="danger" type="button" onClick={() => updateReportStatus(report.id, 'dismissed')}>Dismiss</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="card">
         <h3>Session Monitoring</h3>
         <div className="list">{sessions.map((session) => <SessionMini key={session.id} session={session} />)}</div>
       </div>
