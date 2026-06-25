@@ -261,12 +261,16 @@ async function cloudReviewApplication(id, body) {
     .maybeSingle();
   if (error) throw new Error(error.message);
   // On approval, promote the applicant's role on their profile so the app
-  // recognizes them as a teacher (raw_role stores the granular role string).
+  // recognizes them as a teacher (raw_role stores the granular role string),
+  // and reflect the approval in teaching_profile so UI gates flip immediately.
   if (data && body.status === 'approved') {
     const nextRole = data.requested_role === 'teacher' ? 'teacher' : (data.requested_role || 'assistant_teacher');
+    const niceLabel = nextRole === 'teacher' ? 'Teacher' : nextRole === 'assistant_teacher' ? 'Assistant Teacher' : nextRole;
+    const { data: existing } = await supabase.from('profiles').select('teaching_profile').eq('id', data.user_id).maybeSingle();
+    const nextTeaching = { ...(existing?.teaching_profile || {}), level: niceLabel, applicationStatus: 'approved', licenseStatus: 'Approved' };
     const { error: roleErr } = await supabase
       .from('profiles')
-      .update({ raw_role: nextRole })
+      .update({ raw_role: nextRole, teaching_profile: nextTeaching })
       .eq('id', data.user_id);
     if (roleErr) throw new Error(roleErr.message);
   }
