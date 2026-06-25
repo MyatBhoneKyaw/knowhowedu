@@ -2114,12 +2114,13 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
 }
 
 function Topbar({ user, level, setPage }) {
+  const dailyAvailable = useDailyRewardAvailable(user.id);
   return (
     <header className="topbar topbar-compact">
       <div className="topbar-actions" aria-label="Account shortcuts">
-        <button className="credit-balance" type="button" onClick={() => setPage('wallet')} title="Open credit wallet">
-          <span className="credit-balance-icon" aria-hidden="true">◎</span>
-          <span className="credit-balance-copy"><span>Credit balance</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
+        <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
+          <span className="credit-balance-icon" aria-hidden="true">◎{dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}</span>
+          <span className="credit-balance-copy"><span>Credit balance{dailyAvailable && <em className="credit-balance-flag"> • Daily reward ready</em>}</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
         </button>
         <button className="profile-shortcut" type="button" onClick={() => setPage('profile')} title="Open profile">
           <Avatar text={user.avatar} />
