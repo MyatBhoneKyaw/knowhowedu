@@ -4133,7 +4133,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
             {activeMessages.length === 0 && <p className="muted-text center-text">No messages yet. Start a conversation.</p>}
             {activeMessages.map((message) => (
               <div className={`bubble-row ${message.direction === 'outgoing' ? 'me' : 'them'}`} key={message.id}>
-                {message.direction !== 'outgoing' && <Avatar text={activeProfile?.avatar || getInitials(activeContact)} />}
+                {message.direction !== 'outgoing' && <span style={{ cursor: activeProfile ? 'pointer' : 'default' }} onClick={() => { if (activeProfile) setChatProfileOpen(true); }}><Avatar text={activeProfile?.avatar || getInitials(activeContact)} /></span>}
                 <div className={`bubble ${message.direction === 'outgoing' ? 'outgoing' : 'incoming'}`}>
                   {message.attachment && <MediaPreview attachment={message.attachment} />}
                   <p>{message.body}</p>
