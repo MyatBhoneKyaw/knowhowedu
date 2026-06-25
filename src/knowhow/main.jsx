@@ -1829,7 +1829,7 @@ function App() {
     dashboard: <Dashboard user={user} level={level} sessions={sessions} setPage={setPage} />,
     search: <SearchPage user={user} people={allPeople} posts={communityPosts} sessions={sessions} messages={messages} setMessages={updateMessages} setPage={setPage} initialQuery={navSearchQuery} />,
     wallet: <WalletPage user={user} setUser={updateUser} transactions={transactions} setTransactions={updateTransactions} />,
-    sessions: <SessionsPage user={user} setUser={updateUser} sessions={sessions} setSessions={updateSessions} transactions={transactions} setTransactions={updateTransactions} />,
+    sessions: <SessionsPage user={user} setUser={updateUser} sessions={sessions} setSessions={updateSessions} transactions={transactions} setTransactions={updateTransactions} setPage={setPage} />,
     community: <CommunityPage user={user} posts={communityPosts} setPosts={(next) => { setCommunityPosts(next); localStorage.setItem('knowhow-community-posts', JSON.stringify(next)); }} />,
     video: <VideoPanelPage user={user} setUser={updateUser} />,
     friends: <FriendPage user={user} people={allPeople} setPage={setPage} setNavSearchQuery={setNavSearchQuery} />,
@@ -2844,7 +2844,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
   );
 }
 
-function SessionsPage({ user, setUser, sessions, setSessions, transactions, setTransactions }) {
+function SessionsPage({ user, setUser, sessions, setSessions, transactions, setTransactions, setPage }) {
   const [showDialog, setShowDialog] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
@@ -3042,6 +3042,15 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       setSessionNotice('This session is full.');
       return;
     }
+    // Credit check: a learner must hold at least the session's credit cost before joining a seat.
+    const isTeacherSelf = getParticipantRole(session, user) === 'mentor';
+    const sessionCost = Number(session.credits ?? getBillableCredits(session) ?? 0);
+    const currentCredits = Number(normalizeWallet(user.wallet).current || 0);
+    if (!isTeacherSelf && sessionCost > 0 && currentCredits < sessionCost) {
+      setSessionNotice(`You need ${formatCredits(sessionCost)} credits to join this seat (you have ${formatCredits(currentCredits)}). Redirecting to the credit loan page…`);
+      if (typeof setPage === 'function') window.setTimeout(() => setPage('wallet'), 700);
+      return;
+    }
     const nextSessions = sessions.map((item) => {
       if (item.id !== session.id) return item;
       const nextJoinedSeats = [
@@ -3131,7 +3140,29 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     setSessionNotice(`Meeting left. Verified overlap so far: ${updated?.verifiedDurationMinutes || 0} minute(s).`);
   }
 
-  function completeSession(session) {
+  // Compute verified overlap (in minutes) between mentor intervals and ONE specific learner's intervals.
+  function learnerVerifiedMinutes(attendance = [], learnerUserName = '', nowIso = '') {
+    const toMerged = (filterFn) => {
+      const items = attendance.filter(filterFn).filter((a) => a.joinedAt && (a.leftAt || nowIso))
+        .map((a) => ({ start: new Date(a.joinedAt).getTime(), end: new Date(a.leftAt || nowIso).getTime() }))
+        .filter((x) => x.end > x.start)
+        .sort((a, b) => a.start - b.start);
+      const merged = [];
+      for (const it of items) {
+        const last = merged[merged.length - 1];
+        if (!last || it.start > last.end) merged.push({ ...it });
+        else last.end = Math.max(last.end, it.end);
+      }
+      return merged;
+    };
+    const mentors = toMerged((a) => a.role === 'mentor');
+    const learners = toMerged((a) => a.role === 'learner' && a.userName === learnerUserName);
+    let overlapMs = 0;
+    for (const m of mentors) for (const l of learners) overlapMs += Math.max(0, Math.min(m.end, l.end) - Math.max(m.start, l.start));
+    return Number((overlapMs / 60000).toFixed(2));
+  }
+
+  async function completeSession(session) {
     setSessionNotice('');
     if (session.status === 'Completed') {
       setSessionNotice('This session is already completed.');
@@ -3141,49 +3172,99 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       setSessionNotice('Cancelled sessions cannot be completed.');
       return;
     }
-    const isTeacher = session.teacher === user.fullName;
-    const currentWallet = normalizeWallet(user.wallet);
-    const attendanceFields = sessionAttendanceFields(session.attendance || [], new Date().toISOString());
+    const isTeacher = session.teacher === user.fullName || (session.teacherId && session.teacherId === user.id);
+    const nowIso = new Date().toISOString();
+    const attendanceFields = sessionAttendanceFields(session.attendance || [], nowIso);
     const sessionForBilling = { ...session, ...attendanceFields };
     const billableMinutes = getBillableMinutes(sessionForBilling);
+    const ratePerMinute = getSessionCreditRate(sessionForBilling);
     const billableCredits = getBillableCredits(sessionForBilling);
-    if (!isTeacher && currentWallet.current < billableCredits) {
-      setSessionNotice(`Not enough credits to complete this learning session. Required: ${formatCredits(billableCredits)} credits for ${billableMinutes} minute(s).`);
-      return;
+
+    // Settle credits between each joined learner and the teacher using verified minutes.
+    const joinedSeats = (session.joinedSeats || []).filter((s) => s.userId && s.userId !== session.teacherId);
+    const settlements = [];
+    if (session.id && session.teacherId && (session.fromCloud || session.cloudId || /^[0-9a-f-]{36}$/i.test(String(session.id)))) {
+      for (const seat of joinedSeats) {
+        const perLearnerMinutes = learnerVerifiedMinutes(session.attendance || [], seat.userName, nowIso) || billableMinutes;
+        const perLearnerCredits = Number((perLearnerMinutes * ratePerMinute).toFixed(2));
+        if (perLearnerCredits <= 0) continue;
+        try {
+          await supabase.rpc('session_settle_verified', { _session_id: session.id, _learner_id: seat.userId, _credits: perLearnerCredits });
+          settlements.push({ learner: seat.userName, credits: perLearnerCredits, minutes: perLearnerMinutes });
+        } catch (err) {
+          setSessionNotice(`Settlement failed for ${seat.userName}: ${err.message || err}`);
+        }
+      }
     }
-    const amount = isTeacher ? billableCredits : -billableCredits;
-    const nextWallet = normalizeWallet({
-      ...currentWallet,
-      current: Number((currentWallet.current + amount).toFixed(2)),
-      earned: isTeacher ? Number((currentWallet.earned + billableCredits).toFixed(2)) : currentWallet.earned,
-      spent: !isTeacher ? Number((currentWallet.spent + billableCredits).toFixed(2)) : currentWallet.spent,
-    });
+
+    // Reflect the local user's side of the transfer in their visible wallet/transactions.
+    const currentWallet = normalizeWallet(user.wallet);
+    let nextWallet = currentWallet;
+    let localTransactions = [];
+    if (isTeacher && settlements.length) {
+      const earned = settlements.reduce((s, x) => s + x.credits, 0);
+      nextWallet = normalizeWallet({
+        ...currentWallet,
+        current: Number((currentWallet.current + earned).toFixed(2)),
+        earned: Number((currentWallet.earned + earned).toFixed(2)),
+      });
+      localTransactions = settlements.map((s) => ({
+        id: crypto.randomUUID(), type: 'Earned',
+        title: `Teaching ${session.topic} • ${s.minutes} min verified • ${formatCredits(s.credits)} credits from ${s.learner}`,
+        amount: s.credits, date: nowIso.slice(0, 10),
+      }));
+    } else if (!isTeacher) {
+      const mine = settlements.find((s) => s.learner === user.fullName);
+      const myCredits = mine ? mine.credits : billableCredits;
+      const myMinutes = mine ? mine.minutes : billableMinutes;
+      if (currentWallet.current < myCredits) {
+        setSessionNotice(`Not enough credits to complete this learning session. Required: ${formatCredits(myCredits)} credits for ${myMinutes} minute(s).`);
+        return;
+      }
+      // If no cloud settlement happened (local-only session), debit locally.
+      if (!settlements.length) {
+        nextWallet = normalizeWallet({
+          ...currentWallet,
+          current: Number((currentWallet.current - myCredits).toFixed(2)),
+          spent: Number((currentWallet.spent + myCredits).toFixed(2)),
+        });
+      } else {
+        // Refresh from cloud wallet would be ideal; mirror the debit locally so UI matches.
+        nextWallet = normalizeWallet({
+          ...currentWallet,
+          current: Number((currentWallet.current - myCredits).toFixed(2)),
+          spent: Number((currentWallet.spent + myCredits).toFixed(2)),
+        });
+      }
+      localTransactions = [{
+        id: crypto.randomUUID(), type: 'Spent',
+        title: `Learning ${session.topic} • ${myMinutes} min verified • ${formatCredits(myCredits)} credits`,
+        amount: -myCredits, date: nowIso.slice(0, 10),
+      }];
+    }
+
     const nextUser = {
       ...user,
       wallet: nextWallet,
       xp: user.xp + 45,
-      badges: user.badges.includes('10 Hours Taught') && isTeacher ? user.badges : isTeacher ? [...user.badges, '10 Hours Taught'] : user.badges,
-    };
-    const nextTransaction = {
-      id: crypto.randomUUID(),
-      type: isTeacher ? 'Earned' : 'Spent',
-      title: `${isTeacher ? 'Teaching' : 'Learning'} ${session.topic} • ${billableMinutes} min verified • ${formatCredits(billableCredits)} credits`,
-      amount,
-      date: new Date().toISOString().slice(0, 10),
+      badges: isTeacher && !user.badges.includes('10 Hours Taught') ? [...user.badges, '10 Hours Taught'] : user.badges,
     };
     const nextSessions = sessions.map((item) => item.id === session.id ? {
       ...item,
       status: 'Completed',
-      completedAt: new Date().toISOString(),
-      ...sessionAttendanceFields(item.attendance || [], new Date().toISOString()),
+      completedAt: nowIso,
+      ...sessionAttendanceFields(item.attendance || [], nowIso),
       creditsCharged: billableCredits,
       billableMinutes,
       summary: generateSummary({ ...item, billableMinutes, creditsCharged: billableCredits }),
     } : item);
     setUser(nextUser);
     setSessions(nextSessions);
-    setTransactions([nextTransaction, ...transactions], nextUser);
-    setSessionNotice(`Session completed. ${formatCredits(billableCredits)} credit(s) were calculated from ${billableMinutes} minute(s) using the standard time table, and the completed session was moved out of the active list.`);
+    if (localTransactions.length) setTransactions([...localTransactions, ...transactions], nextUser);
+    const summary = settlements.length
+      ? `Session completed. Transferred ${settlements.map((s) => `${formatCredits(s.credits)} from ${s.learner}`).join(', ')} to the teacher using verified minutes.`
+      : `Session completed. ${formatCredits(billableCredits)} credit(s) calculated from ${billableMinutes} verified minute(s).`;
+    setSessionNotice(summary);
   }
 
   return (
