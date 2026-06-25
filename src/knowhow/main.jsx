@@ -2039,6 +2039,31 @@ function AuthScreen({ onAuthSuccess }) {
   );
 }
 
+function useDailyRewardAvailable(userId) {
+  const compute = () => {
+    if (!userId) return false;
+    try {
+      const raw = JSON.parse(localStorage.getItem(`knowhow:dailyReward:${userId}`) || 'null') || { lastClaim: '' };
+      const today = new Date().toISOString().slice(0, 10);
+      return raw.lastClaim !== today;
+    } catch { return true; }
+  };
+  const [available, setAvailable] = useState(compute);
+  useEffect(() => {
+    const handler = () => setAvailable(compute());
+    handler();
+    window.addEventListener('daily-reward-updated', handler);
+    window.addEventListener('focus', handler);
+    const interval = setInterval(handler, 60000);
+    return () => {
+      window.removeEventListener('daily-reward-updated', handler);
+      window.removeEventListener('focus', handler);
+      clearInterval(interval);
+    };
+  }, [userId]);
+  return available;
+}
+
 function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery }) {
   const items = [
     ['dashboard', 'Home'],
@@ -2048,6 +2073,8 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
     ['sessions', 'Sessions'],
     ['settings', 'Settings'],
   ];
+
+  const dailyAvailable = useDailyRewardAvailable(user.id);
 
   function submitSearch(event) {
     event.preventDefault();
@@ -2075,9 +2102,9 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
         ))}
       </nav>
       <div className="topbar-actions nav-account-actions" aria-label="Account shortcuts">
-        <button className="credit-balance" type="button" onClick={() => setPage('wallet')} title="Open credit wallet">
-          <span className="credit-balance-icon" aria-hidden="true">◎</span>
-          <span className="credit-balance-copy"><span>Credit balance</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
+        <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
+          <span className="credit-balance-icon" aria-hidden="true">◎{dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}</span>
+          <span className="credit-balance-copy"><span>Credit balance{dailyAvailable && <em className="credit-balance-flag"> • Daily reward ready</em>}</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
         </button>
         <button className="profile-shortcut" type="button" onClick={() => setPage('profile')} title="Open profile">
           <Avatar text={user.avatar} />
@@ -2089,12 +2116,13 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
 }
 
 function Topbar({ user, level, setPage }) {
+  const dailyAvailable = useDailyRewardAvailable(user.id);
   return (
     <header className="topbar topbar-compact">
       <div className="topbar-actions" aria-label="Account shortcuts">
-        <button className="credit-balance" type="button" onClick={() => setPage('wallet')} title="Open credit wallet">
-          <span className="credit-balance-icon" aria-hidden="true">◎</span>
-          <span className="credit-balance-copy"><span>Credit balance</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
+        <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
+          <span className="credit-balance-icon" aria-hidden="true">◎{dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}</span>
+          <span className="credit-balance-copy"><span>Credit balance{dailyAvailable && <em className="credit-balance-flag"> • Daily reward ready</em>}</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
         </button>
         <button className="profile-shortcut" type="button" onClick={() => setPage('profile')} title="Open profile">
           <Avatar text={user.avatar} />
@@ -2609,7 +2637,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
       }),
     };
     const nextState = { lastClaim: today, streak: nextStreak };
-    try { localStorage.setItem(dailyKey, JSON.stringify(nextState)); } catch {}
+    try { localStorage.setItem(dailyKey, JSON.stringify(nextState)); window.dispatchEvent(new Event('daily-reward-updated')); } catch {}
     setDailyState(nextState);
     addTransaction('Daily Reward', `Day ${nextStreak} streak bonus`, rewardAmount, nextUser);
     setWalletNotice(`Daily reward claimed: +${rewardAmount} credits. Streak: ${nextStreak} day${nextStreak === 1 ? '' : 's'}.`);
