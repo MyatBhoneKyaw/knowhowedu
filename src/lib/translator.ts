@@ -183,10 +183,25 @@ function schedule(delay = 120) {
   scheduleTimer = window.setTimeout(() => { scheduleTimer = null; run(); }, delay);
 }
 
+function applyCachedSync() {
+  const remaining: Target[] = [];
+  for (const tgt of pending) {
+    if (tgt.kind === "text" && !tgt.node.isConnected) continue;
+    if (tgt.kind === "attr" && !tgt.el.isConnected) continue;
+    const key = getKey(tgt);
+    if (!key) continue;
+    const hit = cache.get(key);
+    if (hit) applyTranslation(tgt, hit);
+    else remaining.push(tgt);
+  }
+  pending = remaining;
+}
+
 function queueAll() {
   pending = [];
   collectFrom(document.body);
-  run();
+  applyCachedSync();
+  if (pending.length) run();
 }
 
 function startObserver() {
