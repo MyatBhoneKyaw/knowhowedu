@@ -3915,6 +3915,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
   const [activeFilter, setActiveFilter] = useState('solo');
   const [messageSearch, setMessageSearch] = useState('');
   const [composerMode, setComposerMode] = useState('message');
+  const [chatProfileOpen, setChatProfileOpen] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState({
     topic: 'English Speaking',
     date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
