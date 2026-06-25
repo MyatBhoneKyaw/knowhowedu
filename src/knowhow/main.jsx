@@ -5085,6 +5085,20 @@ function VideoPanelPage({ user, setUser }) {
           </div>
         </div>
       )}
+      {videoAd && (
+        <AdOverlay
+          ad={videoAd}
+          placement="Before video"
+          onClose={() => {
+            setVideoAd(null);
+            if (pendingVideo) {
+              setActiveVideo(pendingVideo);
+              setPendingVideo(null);
+            }
+          }}
+        />
+      )}
+
     </section>
   );
 }
