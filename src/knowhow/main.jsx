@@ -4746,7 +4746,30 @@ function SettingsPage({ user, setUser, onLogout }) {
   const [passwordDraft, setPasswordDraft] = useState({ old: '', next: '', confirm: '' });
   const [settingsNotice, setSettingsNotice] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [subscriptionPlan, setSubscriptionPlan] = useState('Free');
+  const subscriptionStorageKey = `knowhow:subscription:${user?.id || 'guest'}`;
+  const [subscriptionState, setSubscriptionState] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(subscriptionStorageKey);
+      return raw ? JSON.parse(raw) : { plan: 'Free', expiresAt: null, lastTrialAt: null };
+    } catch { return { plan: 'Free', expiresAt: null, lastTrialAt: null }; }
+  });
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(subscriptionStorageKey);
+      setSubscriptionState(raw ? JSON.parse(raw) : { plan: 'Free', expiresAt: null, lastTrialAt: null });
+    } catch { setSubscriptionState({ plan: 'Free', expiresAt: null, lastTrialAt: null }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+  useEffect(() => {
+    try { window.localStorage.setItem(subscriptionStorageKey, JSON.stringify(subscriptionState)); } catch {}
+  }, [subscriptionStorageKey, subscriptionState]);
+  // auto-expire
+  const nowTs = Date.now();
+  const activePlan = (subscriptionState.expiresAt && subscriptionState.expiresAt < nowTs)
+    ? 'Free'
+    : (subscriptionState.plan || 'Free');
+  const subscriptionPlan = activePlan;
+  const setSubscriptionPlan = (plan) => setSubscriptionState((s) => ({ ...s, plan, expiresAt: null }));
   const paymentStorageKey = `knowhow:payment-methods:${user?.id || 'guest'}`;
   const [paymentMethods, setPaymentMethods] = useState(() => {
     try {
