@@ -544,14 +544,37 @@ async function listCommunityPosts(community) {
   let q = supabase.from('community_posts').select('*, community_comments(*)').order('created_at', { ascending: false });
   if (community) q = q.eq('community', community);
   const { data, error } = await q;
-  return camel(ok(data, error));
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  const authorIds = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
+  let authorsMap = {};
+  if (authorIds.length) {
+    const { data: profs } = await supabase.from('profiles').select('id, username, full_name').in('id', authorIds);
+    (profs || []).forEach((p) => { authorsMap[p.id] = p.full_name || p.username || 'Member'; });
+  }
+  return rows.map((r) => ({
+    id: r.id,
+    community: r.community,
+    title: r.title,
+    body: r.body,
+    author: authorsMap[r.author_id] || 'Member',
+    authorId: r.author_id,
+    votes: r.votes || 0,
+    likes: 0,
+    dislikes: 0,
+    comments: (r.community_comments || []).map((c) => ({ id: c.id, body: c.body, author: authorsMap[c.user_id] || 'Member', createdAt: c.created_at })),
+    tags: [r.community].filter(Boolean),
+    createdAt: r.created_at,
+  }));
 }
 async function createCommunityPost(body) {
   const uid = await requireUid();
-  const row = snake(body); row.author_id = uid;
+  const row = { community: body.community, title: body.title, body: body.body, author_id: uid };
   const { data, error } = await supabase.from('community_posts').insert(row).select('*').maybeSingle();
-  return camel(ok(data, error));
+  if (error) throw new Error(error.message);
+  return { id: data.id, community: data.community, title: data.title, body: data.body, votes: 0, likes: 0, dislikes: 0, comments: [], tags: [data.community], createdAt: data.created_at };
 }
+
 async function voteCommunity(postId) {
   const uid = await requireUid();
   await supabase.from('community_reactions').upsert({ post_id: postId, user_id: uid, value: 1 }, { onConflict: 'post_id,user_id' });
