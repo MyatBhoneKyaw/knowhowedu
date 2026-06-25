@@ -2,9 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import knowhowLogo from './knowhow-logo.png';
+import { supabase } from '@/integrations/supabase/client';
 
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Lovable Cloud (Supabase) backend — replaces the legacy MongoDB API.
+// The helpers below preserve the original apiRequest/adminApiRequest call shape
+// so the rest of the app needs no changes.
+const API_BASE = '/__lovable_cloud__';
 
 function getInitials(name = 'User') {
   return name
