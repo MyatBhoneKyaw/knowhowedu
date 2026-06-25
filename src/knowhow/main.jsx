@@ -5652,8 +5652,12 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
       {adminNotice && <div className="notice">{adminNotice}</div>}
       <div className="admin-dashboard-layout">
         <div className="card">
-          <h3>User Management</h3>
-          <div className="list">
+          <details className="user-mgmt-dropdown">
+            <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', listStyle: 'none' }}>
+              <h3 style={{ margin: 0 }}>User Management</h3>
+              <span className="muted-text" style={{ fontSize: 13 }}>{adminUsers.filter((p) => !removedUserIds.has(p.id)).length} users ▾</span>
+            </summary>
+            <div className="list" style={{ marginTop: 12 }}>
             {adminUsers.filter((person) => !removedUserIds.has(person.id)).map((person) => {
               const isSuspended = suspendedUserIds.has(person.id);
               const busy = userActionBusy === person.id;
@@ -5697,7 +5701,8 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
                 </div>
               );
             })}
-          </div>
+            </div>
+          </details>
         </div>
 
       </div>
