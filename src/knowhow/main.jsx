@@ -2,9 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import knowhowLogo from './knowhow-logo.png';
+import { supabase } from '@/integrations/supabase/client';
 
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Lovable Cloud (Supabase) backend — replaces the legacy MongoDB API.
+// The helpers below preserve the original apiRequest/adminApiRequest call shape
+// so the rest of the app needs no changes.
+const API_BASE = '/__lovable_cloud__';
 
 function getInitials(name = 'User') {
   return name
@@ -73,48 +77,232 @@ function normalizeBackendUser(apiUser, wallet) {
   };
 }
 
-async function apiRequest(path, options = {}) {
-  const token = localStorage.getItem('knowhow-token');
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
+// ---------- Lovable Cloud backend bridge ----------
+
+function profileRowToApiUser(row, roleRow) {
+  if (!row) return null;
+  const profile = row.profile || {};
+  return {
+    _id: row.id,
+    id: row.id,
+    fullName: row.full_name,
+    username: row.username,
+    email: row.email,
+    role: roleRow?.role || row.raw_role || 'learner',
+    profile,
+    learningProfile: row.learning_profile || {},
+    teachingProfile: row.teaching_profile || {},
+    subjectLevels: row.subject_levels || [],
+    badges: row.badges || [],
+    xp: row.xp || 0,
+    dailyStreak: row.daily_streak || 0,
+    twoFactorEnabled: row.two_factor_enabled || false,
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
+}
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
+function walletRowToApiWallet(row) {
+  if (!row) return null;
+  return {
+    currentCredits: Number(row.current_credits ?? 3),
+    earnedCredits: Number(row.earned_credits ?? 0),
+    spentCredits: Number(row.spent_credits ?? 0),
+    loanOutstanding: Number(row.loan_outstanding ?? 0),
+    loanDueDate: row.loan_due_date,
+    purchasedCredits: Number(row.purchased_credits ?? 0),
+    lectureAccess: Number(row.lecture_access ?? 0),
+  };
+}
+
+async function fetchMeFromCloud() {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData?.session?.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+  const [profileRes, walletRes, roleRes] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    supabase.from('wallets').select('*').eq('user_id', userId).maybeSingle(),
+    supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle(),
+  ]);
+  if (profileRes.error) throw new Error(profileRes.error.message);
+  return {
+    user: profileRowToApiUser(profileRes.data, roleRes.data),
+    wallet: walletRowToApiWallet(walletRes.data),
+  };
+}
+
+async function cloudSignIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+  const me = await fetchMeFromCloud();
+  return { token: data.session.access_token, user: me.user, wallet: me.wallet };
+}
+
+async function cloudSignUp(payload) {
+  const { email, password, fullName, username, region, age, languages, interests } = payload;
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/`,
+      data: {
+        full_name: fullName,
+        username,
+        profile: {
+          region: region || '',
+          age: age ? Number(age) : undefined,
+          languages: languages || [],
+          interests: interests || [],
+        },
+      },
+    },
   });
-
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
-
-  if (!response.ok) {
-    throw new Error(data.message || `Request failed with status ${response.status}`);
+  if (error) throw new Error(error.message);
+  // If email confirmation is off (default for Lovable Cloud), session exists immediately.
+  if (!data.session) {
+    throw new Error('Account created. Please check your email to confirm, then log in.');
   }
+  const me = await fetchMeFromCloud();
+  return { token: data.session.access_token, user: me.user, wallet: me.wallet };
+}
 
+async function cloudUpdateProfile(body) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData?.session?.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+  const patch = {};
+  if (body.fullName !== undefined) patch.full_name = body.fullName;
+  if (body.username !== undefined) patch.username = body.username;
+  if (body.email !== undefined) patch.email = body.email;
+  if (body.profile !== undefined) patch.profile = body.profile;
+  if (body.learningProfile !== undefined) patch.learning_profile = body.learningProfile;
+  if (body.teachingProfile !== undefined) patch.teaching_profile = body.teachingProfile;
+  if (body.subjectLevels !== undefined) patch.subject_levels = body.subjectLevels;
+  const { data, error } = await supabase.from('profiles').update(patch).eq('id', userId).select('*').maybeSingle();
+  if (error) throw new Error(error.message);
+  const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle();
+  return { user: profileRowToApiUser(data, roleRow) };
+}
+
+async function cloudSubmitTeacherApplication(body) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData?.session?.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+  const { data, error } = await supabase.from('teacher_applications').insert({
+    user_id: userId,
+    subject: body.subject,
+    requested_role: body.requestedRole,
+    learner_level: body.learnerLevel,
+    teacher_level_claim: body.teacherLevelClaim,
+    linked_in_url: body.linkedInUrl,
+    cv_url: body.cvUrl,
+    license_url: body.licenseUrl,
+    authority_name: body.authorityName,
+    note: body.note,
+  }).select('*').maybeSingle();
+  if (error) throw new Error(error.message);
   return data;
 }
 
+function applicationRowToApi(row, profile) {
+  return {
+    _id: row.id,
+    id: row.id,
+    user: profile ? { _id: profile.id, fullName: profile.full_name, username: profile.username, email: profile.email } : row.user_id,
+    subject: row.subject,
+    requestedRole: row.requested_role,
+    learnerLevel: row.learner_level,
+    teacherLevelClaim: row.teacher_level_claim,
+    linkedInUrl: row.linked_in_url,
+    cvUrl: row.cv_url,
+    licenseUrl: row.license_url,
+    authorityName: row.authority_name,
+    note: row.note,
+    status: row.status,
+    adminNote: row.admin_note,
+    reviewedAt: row.reviewed_at,
+    createdAt: row.created_at,
+  };
+}
+
+async function cloudListAdminApplications() {
+  const { data: apps, error } = await supabase
+    .from('teacher_applications')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  const userIds = [...new Set((apps || []).map((a) => a.user_id))];
+  let profilesById = {};
+  if (userIds.length) {
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name, username, email').in('id', userIds);
+    profilesById = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
+  }
+  return (apps || []).map((row) => applicationRowToApi(row, profilesById[row.user_id]));
+}
+
+async function cloudReviewApplication(id, body) {
+  const { data, error } = await supabase
+    .from('teacher_applications')
+    .update({
+      status: body.status,
+      admin_note: body.adminNote,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const { data: profile } = await supabase.from('profiles').select('id, full_name, username, email').eq('id', data.user_id).maybeSingle();
+  return applicationRowToApi(data, profile);
+}
+
+async function cloudAdminLogin(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+  const userId = data.session.user.id;
+  const { data: roleRow, error: roleErr } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('role', 'admin')
+    .maybeSingle();
+  if (roleErr) throw new Error(roleErr.message);
+  if (!roleRow) {
+    await supabase.auth.signOut();
+    const err = new Error('This account exists but does not have admin access. Ask an existing admin to grant you the admin role.');
+    err.status = 403;
+    throw err;
+  }
+  return { token: data.session.access_token, user: { id: userId, email } };
+}
+
+async function apiRequest(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+  const body = options.body ? JSON.parse(options.body) : undefined;
+
+  if (path === '/auth/login' && method === 'POST') return cloudSignIn(body.email, body.password);
+  if (path === '/auth/register' && method === 'POST') return cloudSignUp(body);
+  if (path === '/auth/me' && method === 'GET') return fetchMeFromCloud();
+  if (path === '/users/me/profile' && method === 'PATCH') return cloudUpdateProfile(body);
+  if (path === '/qualifications/teacher-applications' && method === 'POST') return cloudSubmitTeacherApplication(body);
+
+  throw new Error(`Unsupported API route: ${method} ${path}`);
+}
 
 async function adminApiRequest(path, options = {}) {
-  const token = localStorage.getItem('knowhow-admin-token');
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const method = (options.method || 'GET').toUpperCase();
+  const body = options.body ? JSON.parse(options.body) : undefined;
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
-  if (!response.ok) {
-    throw new Error(data.message || `Admin request failed with status ${response.status}`);
-  }
-  return data;
+  // Ensure the current session belongs to an admin.
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData?.session?.user?.id;
+  if (!userId) throw new Error('Admin session expired. Please log in again.');
+  const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', userId).eq('role', 'admin').maybeSingle();
+  if (!roleRow) throw new Error('Admin privileges required.');
+
+  if (path === '/admin/teacher-applications' && method === 'GET') return cloudListAdminApplications();
+  const reviewMatch = path.match(/^\/admin\/teacher-applications\/([^/]+)$/);
+  if (reviewMatch && method === 'PATCH') return cloudReviewApplication(reviewMatch[1], body);
+
+  throw new Error(`Unsupported admin API route: ${method} ${path}`);
 }
 
 function statusToApi(status) {
@@ -983,6 +1171,7 @@ function App() {
   function handleLogout() {
     localStorage.removeItem('knowhow-token');
     localStorage.removeItem('knowhow-user');
+    supabase.auth.signOut().catch(() => {});
     setLoggedIn(false);
   }
 
@@ -3655,11 +3844,12 @@ function VideoPanelPage({ user, setUser }) {
 function AdminShell({ adminAuthed, setAdminAuthed, setAdminMode, sessions, people, transactions, userTheme, teacherApplications, setTeacherApplications, setUser }) {
   function logoutAdmin() {
     localStorage.removeItem('knowhow-admin-token');
+    supabase.auth.signOut().catch(() => {});
     setAdminAuthed(false);
     setAdminMode(false);
     window.history.pushState({}, '', '/');
   }
-  function loginAdmin(token = 'demo-admin') {
+  function loginAdmin(token = 'cloud-admin') {
     localStorage.setItem('knowhow-admin-token', token);
     setAdminAuthed(true);
   }
@@ -3686,46 +3876,21 @@ function AdminLoginPage({ onSuccess }) {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/admin/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.token) {
-        onSuccess(data.token);
-        return;
-      }
-      if (form.email.toLowerCase() === 'admin@knowhow.test' && form.password === 'password123') {
-        onSuccess('demo-admin');
-        return;
-      }
-      const serverMsg = (data && data.message) || '';
-      if (response.status === 400) {
-        setError(serverMsg || 'Email and password are required.');
-      } else if (response.status === 401) {
-        if (/invalid login credentials/i.test(serverMsg)) {
-          setError('Incorrect email or password. Double-check your admin credentials and try again.');
-        } else if (/email not confirmed/i.test(serverMsg)) {
-          setError('This email has not been confirmed yet. Please confirm your email before signing in.');
-        } else {
-          setError(serverMsg || 'Incorrect email or password.');
-        }
-      } else if (response.status === 403) {
-        setError('This account exists but does not have admin access. Ask an existing admin to grant you the admin role.');
-      } else if (response.status === 429) {
+      const result = await cloudAdminLogin(form.email.trim(), form.password);
+      onSuccess(result.token);
+    } catch (err) {
+      const msg = err?.message || '';
+      if (err?.status === 403 || /admin access/i.test(msg)) {
+        setError(msg || 'This account exists but does not have admin access.');
+      } else if (/invalid login credentials/i.test(msg)) {
+        setError('Incorrect email or password. Double-check your admin credentials and try again.');
+      } else if (/email not confirmed/i.test(msg)) {
+        setError('This email has not been confirmed yet. Please confirm your email before signing in.');
+      } else if (/rate|too many/i.test(msg)) {
         setError('Too many sign-in attempts. Please wait a moment and try again.');
-      } else if (response.status >= 500) {
-        setError('The admin service is temporarily unavailable. Please try again in a moment.');
       } else {
-        setError(serverMsg || 'Unable to sign in. Please try again.');
+        setError(msg || 'Unable to sign in. Please try again.');
       }
-    } catch (error) {
-      if (form.email.toLowerCase() === 'admin@knowhow.test' && form.password === 'password123') {
-        onSuccess('demo-admin');
-        return;
-      }
-      setError('Cannot reach the admin service. Check your internet connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -3809,9 +3974,9 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
         const localOnly = normalizedApplications.filter((item) => item.source !== 'backend' && !normalizedBackend.some((backendItem) => backendItem.id === item.id));
         setTeacherApplications([...normalizedBackend, ...localOnly]);
         if (normalizedBackend[0]) setSelectedApplicationId(normalizedBackend[0].id);
-        setAdminNotice('Backend teacher applications loaded. Admin review is connected to API when MongoDB/server are running.');
+        setAdminNotice('Teacher applications loaded from Lovable Cloud.');
       } catch (error) {
-        setAdminNotice('Using local demo review data. Backend admin review will work after logging in with a real admin token and running MongoDB/server.');
+        setAdminNotice('Could not load applications from Lovable Cloud. Showing local demo data.');
       }
     }
     loadRealApplications();
