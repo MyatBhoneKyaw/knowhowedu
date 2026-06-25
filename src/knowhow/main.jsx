@@ -2032,7 +2032,10 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
       </div>
       <nav className="top-nav-menu" aria-label="Primary navigation">
         <button className="nav-search-icon-only" type="button" onClick={() => { setNavSearchQuery(''); setPage('search'); }} title="Search people" aria-label="Search people">
-          ⌕
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="20" y1="20" x2="16.5" y2="16.5" />
+          </svg>
         </button>
         {items.map(([key, label]) => (
           <button key={key} className={page === key ? 'active' : ''} onClick={() => setPage(key)} title={label}>

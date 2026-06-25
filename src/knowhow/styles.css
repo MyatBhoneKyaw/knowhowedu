@@ -3962,21 +3962,23 @@ body {
   width: 42px !important;
   height: 42px !important;
   min-width: 42px !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 50% !important;
+  border: none !important;
+  border-radius: 0 !important;
   display: grid !important;
   place-items: center !important;
-  background: linear-gradient(180deg, rgba(249,251,253,.96), rgba(229,235,242,.96)) !important;
+  background: transparent !important;
   color: var(--muted) !important;
-  font-size: 21px !important;
-  font-weight: 950 !important;
+  font-size: 30px !important;
+  line-height: 1 !important;
+  font-weight: 700 !important;
   padding: 0 !important;
   box-shadow: none !important;
 }
+.nav-search-icon-only svg { width: 26px; height: 26px; }
 .nav-search-icon-only:hover,
 .nav-search-icon-only:focus-visible {
-  border-color: rgba(79,70,229,.36) !important;
   color: var(--primary) !important;
+  background: transparent !important;
   transform: translateY(-1px);
 }
 
