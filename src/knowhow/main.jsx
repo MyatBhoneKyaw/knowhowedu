@@ -3089,9 +3089,21 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
               {session.summary && <div className="summary-box compact-session-summary"><strong>AI Summary:</strong><p>{session.summary}</p></div>}
               <div className="session-card-actions">
                 <button className="primary" onClick={() => joinSeat(session)} disabled={alreadyJoined || isFull}>{alreadyJoined ? 'Seat Joined' : isFull ? 'Full' : 'Join Seat'}</button>
+                {(role === 'mentor' || alreadyJoined) && (() => {
+                  const allowed = canJoinMeetingNow(session) && session.status !== 'Cancelled' && session.status !== 'Completed';
+                  const start = sessionStartMs(session);
+                  const title = !allowed && start
+                    ? `Meeting opens 10 minutes before ${new Date(start).toLocaleString()}`
+                    : 'Open the meeting room';
+                  return (
+                    <button className="primary" onClick={() => joinMeeting(session)} disabled={!allowed} title={title}>
+                      {allowed ? 'Join Meeting' : 'Opens at start time'}
+                    </button>
+                  );
+                })()}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Accepted')}>Accept</button>}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Rescheduled')}>Reschedule</button>}
-                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Cancelled')}>Cancel</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Cancelled')} disabled={session.status === 'Cancelled' || session.status === 'Completed'}>Cancel</button>}
                 {canTeach && role === 'mentor' && <button className="primary" onClick={() => completeSession(session)} disabled={session.status === 'Cancelled'}>Complete</button>}
               </div>
             </div>
