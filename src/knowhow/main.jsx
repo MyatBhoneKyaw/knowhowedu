@@ -3515,7 +3515,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
   const [activeContact, setActiveContact] = useState(() => localStorage.getItem('knowhow-open-chat') || contacts[0] || 'Community Inbox');
   const [text, setText] = useState('');
   const [contactSearch, setContactSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState('inbox');
+  const [activeFilter, setActiveFilter] = useState('solo');
   const [messageSearch, setMessageSearch] = useState('');
   const [composerMode, setComposerMode] = useState('message');
   const [scheduleDraft, setScheduleDraft] = useState({
@@ -3534,10 +3534,20 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
     }
   }, []);
 
+  const groupContactNames = useMemo(() => {
+    const set = new Set();
+    messages.forEach((message) => {
+      if (message.type === 'Group Chat' || message.type === 'group' || message.isGroup) set.add(message.name);
+    });
+    return set;
+  }, [messages]);
+  const isGroupContact = (contact) => groupContactNames.has(contact) || /\b(group|circle|club|team|community|cohort|squad)\b/i.test(contact);
   const filteredContacts = contacts.filter((contact) => {
     const matchesSearch = normalizeText(contact).includes(normalizeText(contactSearch)) || normalizeText(contactProfiles.get(contact)?.username).includes(normalizeText(contactSearch));
     const hasConversation = messages.some((message) => message.name === contact);
-    return matchesSearch && (activeFilter === 'people' || hasConversation);
+    if (!matchesSearch || !hasConversation) return false;
+    const grouped = isGroupContact(contact);
+    return activeFilter === 'group' ? grouped : !grouped;
   });
   const activeMessages = messages.filter((message) => message.name === activeContact && (!messageSearch.trim() || normalizeText([message.body, message.attachment?.name, message.attachment?.kind].join(' ')).includes(normalizeText(messageSearch))));
   const activeProfile = contactProfiles.get(activeContact);
@@ -3671,7 +3681,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
             <svg className="messenger-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input className="compact-input messenger-search-input" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Search people or groups" />
           </div>
-          <div className="chat-filter-row"><button type="button" className={activeFilter === 'inbox' ? 'active' : ''} onClick={() => setActiveFilter('inbox')}>Inbox</button><button type="button" className={activeFilter === 'people' ? 'active' : ''} onClick={() => setActiveFilter('people')}>People</button></div>
+          <div className="chat-filter-row"><button type="button" className={activeFilter === 'solo' ? 'active' : ''} onClick={() => setActiveFilter('solo')}>Solo</button><button type="button" className={activeFilter === 'group' ? 'active' : ''} onClick={() => setActiveFilter('group')}>Group</button></div>
           <div className="contact-scroll modern-contact-scroll">
             {filteredContacts.length === 0 && <p className="muted-text empty-contacts">No conversations found.</p>}
             {filteredContacts.map((contact) => {
