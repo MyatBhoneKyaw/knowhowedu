@@ -362,6 +362,88 @@ async function deleteSkill(table, id) {
 }
 
 // ----- Sessions -----
+function localToCloudSession(local) {
+  // Combine date + time into a single timestamp for the date column.
+  let when = local.date || null;
+  if (when && local.time) when = `${local.date}T${local.time}:00`;
+  const durationHours = Number(local.duration || (Number(local.durationMinutes || 0) / 60).toFixed(2)) || 0;
+  return {
+    id: local.id,
+    skill_topic: local.topic || null,
+    date: when,
+    duration_hours: durationHours,
+    room_id: local.roomId || null,
+    meeting_link: local.meetingLink || null,
+    meeting_provider: local.meetingProvider || null,
+    meeting_space_name: local.meetingSpaceName || null,
+    notes: local.notes || null,
+    credit_amount: Number(local.credits || 0) || 0,
+    credit_rate_per_minute: local.creditRatePerMinute || null,
+    teacher_level: local.teacherLevel || null,
+    student_limit: Number(local.studentLimit || 1),
+    seats_available: Number(local.seatsAvailable ?? local.studentLimit ?? 1),
+    status: local.status || 'Pending',
+    learning_summary: {
+      topic: local.topic,
+      teacher: local.teacher,
+      learner: local.learner,
+      date: local.date,
+      time: local.time,
+      durationMinutes: local.durationMinutes,
+      teacherLevelLabel: local.teacherLevel,
+      teacherRating: local.teacherRating,
+      teacherLevelNumber: local.teacherLevelNumber,
+      language: local.language,
+      joinedSeats: local.joinedSeats || [],
+      attendance: local.attendance || [],
+      notes: local.notes,
+      createdByRole: local.createdByRole,
+      creatorOnly: local.creatorOnly,
+    },
+  };
+}
+function cloudToLocalSession(row) {
+  if (!row) return null;
+  const summary = (row.learning_summary && typeof row.learning_summary === 'object') ? row.learning_summary : {};
+  const isoDate = row.date ? new Date(row.date) : null;
+  const dateStr = summary.date || (isoDate ? isoDate.toISOString().slice(0, 10) : '');
+  const timeStr = summary.time || (isoDate ? isoDate.toISOString().slice(11, 16) : '');
+  const durationMinutes = summary.durationMinutes || Math.round(Number(row.duration_hours || 0) * 60);
+  return {
+    id: row.id,
+    cloudId: row.id,
+    topic: summary.topic || row.skill_topic || 'Teaching session',
+    teacher: summary.teacher || '',
+    learner: summary.learner || 'Learner pending',
+    date: dateStr,
+    time: timeStr,
+    duration: Number(row.duration_hours || 0),
+    durationMinutes,
+    credits: Number(row.credit_amount || 0),
+    creditRatePerMinute: row.credit_rate_per_minute,
+    studentLimit: row.student_limit,
+    seatsAvailable: row.seats_available,
+    teacherLevel: row.teacher_level || summary.teacherLevelLabel || 'Approved Teacher',
+    teacherRating: summary.teacherRating,
+    teacherLevelNumber: summary.teacherLevelNumber,
+    language: summary.language,
+    status: row.status || 'Pending',
+    roomId: row.room_id,
+    meetingLink: row.meeting_link,
+    meetingProvider: row.meeting_provider,
+    meetingSpaceName: row.meeting_space_name,
+    notes: row.notes || summary.notes || '',
+    joinedSeats: summary.joinedSeats || [],
+    attendance: summary.attendance || [],
+    createdByRole: summary.createdByRole,
+    creatorOnly: summary.creatorOnly,
+    teacherId: row.teacher_id,
+    learnerId: row.learner_id,
+    requestedBy: row.requested_by,
+    completedAt: row.completed_at,
+    fromCloud: true,
+  };
+}
 async function listMySessions() {
   const uid = await requireUid();
   const { data, error } = await supabase.from('sessions').select('*')
@@ -369,26 +451,43 @@ async function listMySessions() {
     .order('date', { ascending: false });
   return camel(ok(data, error));
 }
+async function listActiveSessions() {
+  const { data, error } = await supabase.from('sessions').select('*')
+    .order('date', { ascending: true })
+    .limit(500);
+  if (error) throw new Error(error.message);
+  // Filter non-completed/cancelled on client to be safe.
+  return (data || [])
+    .filter((r) => !['completed','cancelled'].includes(String(r.status || '').toLowerCase()))
+    .map(cloudToLocalSession);
+}
 async function createSession(body) {
   const uid = await requireUid();
-  const row = snake(body);
+  const row = localToCloudSession(body);
   row.requested_by = uid;
   if (!row.room_id) row.room_id = `kh-${Math.random().toString(36).slice(2, 10)}`;
   if (!row.teacher_id) row.teacher_id = uid;
   const { data, error } = await supabase.from('sessions').insert(row).select('*').maybeSingle();
-  return camel(ok(data, error));
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
 async function updateSessionStatus(id, body) {
   if (body.status === 'completed') {
     const { data, error } = await supabase.rpc('session_complete', { _session_id: id });
-    return camel(ok(data, error));
+    if (error) throw new Error(error.message);
+    return cloudToLocalSession(data);
   }
-  const { data, error } = await supabase.from('sessions').update(snake(body)).eq('id', id).select('*').maybeSingle();
-  return camel(ok(data, error));
+  const patch = { status: body.status };
+  if (body.learningSummary) patch.learning_summary = body.learningSummary;
+  if (body.seatsAvailable !== undefined) patch.seats_available = body.seatsAvailable;
+  const { data, error } = await supabase.from('sessions').update(patch).eq('id', id).select('*').maybeSingle();
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
-async function joinSessionSeat(id) {
-  const { data, error } = await supabase.rpc('session_join_seat', { _session_id: id });
-  return camel(ok(data, error));
+async function joinSessionSeat(id, body = {}) {
+  const { data, error } = await supabase.rpc('session_join_seat_v2', { _session_id: id, _user_name: body.userName || '' });
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
 
 // ----- Messages -----
@@ -566,8 +665,9 @@ async function apiRequest(path, options = {}) {
   // Sessions
   if (path === '/sessions/request' && method === 'POST') return createSession(body);
   if (path === '/sessions/my' && method === 'GET') return listMySessions();
+  if (path === '/sessions/feed' && method === 'GET') return listActiveSessions();
   if ((r = m(/^\/sessions\/([^/]+)\/status$/)) && method === 'PATCH') return updateSessionStatus(r[1], body);
-  if ((r = m(/^\/sessions\/([^/]+)\/meeting\/join$/)) && method === 'POST') return joinSessionSeat(r[1]);
+  if ((r = m(/^\/sessions\/([^/]+)\/meeting\/join$/)) && method === 'POST') return joinSessionSeat(r[1], body);
   if ((r = m(/^\/sessions\/([^/]+)$/)) && method === 'GET') {
     const { data, error } = await supabase.from('sessions').select('*').eq('id', r[1]).maybeSingle();
     return camel(ok(data, error));
@@ -1497,6 +1597,7 @@ function App() {
             const prof = p.profile || {};
             const initials = (p.fullName || p.username || '?')
               .split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+            const resolvedRole = roleLabel(p.rawRole || p.role || 'learner');
             return {
               id: p.id,
               fullName: p.fullName || p.username,
@@ -1513,6 +1614,10 @@ function App() {
               offered: prof.skillsOffered || [],
               wanted: prof.skillsWanted || [],
               email: p.email,
+              role: resolvedRole,
+              rawRole: p.rawRole || p.role || 'learner',
+              teachingProfile: p.teachingProfile || {},
+              teacherLevel: p.teachingProfile?.level || (resolvedRole !== 'Learner' ? resolvedRole : ''),
               isCloudUser: true,
             };
           });
@@ -1523,6 +1628,29 @@ function App() {
     }
     loadCloudPeople();
     return () => { cancelled = true; };
+  }, [loggedIn]);
+
+  // Load active sessions from the cloud so every signed-in user sees teacher-created sessions.
+  useEffect(() => {
+    if (!loggedIn) return undefined;
+    let cancelled = false;
+    async function loadCloudSessions() {
+      try {
+        const cloud = await apiRequest('/sessions/feed');
+        if (cancelled || !Array.isArray(cloud)) return;
+        setSessions((current) => {
+          const byId = new Map();
+          (current || []).forEach((s) => { if (s && s.id) byId.set(s.id, s); });
+          cloud.forEach((s) => { if (s && s.id) byId.set(s.id, { ...(byId.get(s.id) || {}), ...s }); });
+          return Array.from(byId.values());
+        });
+      } catch (e) {
+        // silent — local seed continues to work
+      }
+    }
+    loadCloudSessions();
+    const interval = window.setInterval(loadCloudSessions, 15000);
+    return () => { cancelled = true; window.clearInterval(interval); };
   }, [loggedIn]);
 
   const allPeople = useMemo(() => {
@@ -2652,6 +2780,12 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     notes: '',
   });
   const canTeach = canUserTeach(user);
+  // Re-render every 30s so the "Join Meeting" button enables when the start time arrives.
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setNowTick((n) => n + 1), 30000);
+    return () => window.clearInterval(t);
+  }, []);
   const activeSessions = sessions.filter((session) => session.status !== 'Completed');
   const normalizedSessionSearch = normalizeText(sessionSearch);
   const visibleSessions = activeSessions
@@ -2725,7 +2859,16 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     };
     setSessions([session, ...sessions]);
     setShowDialog(false);
-    setSessionNotice(`Teaching session created. Learners can only join after they are assigned. Credits: ${formatCredits(creditAmount)} using the standard time table (${getCreditTableLabel(durationMinutes)}).`);
+    setSessionNotice(`Teaching session created. Learners can join from the sessions feed. Credits: ${formatCredits(creditAmount)} using the standard time table (${getCreditTableLabel(durationMinutes)}).`);
+    // Persist to cloud so other users can discover and join.
+    try {
+      const saved = await apiRequest('/sessions/request', { method: 'POST', body: JSON.stringify(session) });
+      if (saved && saved.id) {
+        setSessions((current) => current.map((s) => (s.id === session.id ? { ...session, ...saved } : s)));
+      }
+    } catch (err) {
+      setSessionNotice(`Session saved locally but cloud sync failed: ${err.message}. It will not appear for other users yet.`);
+    }
   }
 
   function updateStatus(id, status) {
@@ -2735,6 +2878,9 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       const withRoom = ['Accepted', 'Rescheduled'].includes(status) ? ensureStoredSessionRoom(session) : session;
       return { ...withRoom, status };
     }));
+    // Push to cloud so other participants see the change.
+    apiRequest(`/sessions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+      .catch((err) => setSessionNotice(`Status updated locally but cloud sync failed: ${err.message}.`));
   }
 
   function updateSessionAttendance(sessionId, updater) {
@@ -2778,6 +2924,24 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     });
     setSessions(nextSessions);
     setSessionNotice('Seat joined successfully. This session is now pinned at the top.');
+    // Sync seat join to cloud so the teacher and other learners see the updated seat count.
+    if (session.fromCloud || session.cloudId) {
+      apiRequest(`/sessions/${session.id}/meeting/join`, { method: 'POST', body: JSON.stringify({ userName: user.fullName }) })
+        .catch((err) => setSessionNotice(`Seat joined locally but cloud sync failed: ${err.message}.`));
+    }
+  }
+
+  function sessionStartMs(session) {
+    if (!session.date) return null;
+    const iso = session.time ? `${session.date}T${session.time}:00` : `${session.date}T00:00:00`;
+    const ms = Date.parse(iso);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  function canJoinMeetingNow(session) {
+    const start = sessionStartMs(session);
+    if (start == null) return true; // unknown start → allow
+    // Allow joining from 10 minutes before start time.
+    return Date.now() >= start - 10 * 60 * 1000;
   }
 
   function joinMeeting(session) {
@@ -2931,9 +3095,21 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
               {session.summary && <div className="summary-box compact-session-summary"><strong>AI Summary:</strong><p>{session.summary}</p></div>}
               <div className="session-card-actions">
                 <button className="primary" onClick={() => joinSeat(session)} disabled={alreadyJoined || isFull}>{alreadyJoined ? 'Seat Joined' : isFull ? 'Full' : 'Join Seat'}</button>
+                {(role === 'mentor' || alreadyJoined) && (() => {
+                  const allowed = canJoinMeetingNow(session) && session.status !== 'Cancelled' && session.status !== 'Completed';
+                  const start = sessionStartMs(session);
+                  const title = !allowed && start
+                    ? `Meeting opens 10 minutes before ${new Date(start).toLocaleString()}`
+                    : 'Open the meeting room';
+                  return (
+                    <button className="primary" onClick={() => joinMeeting(session)} disabled={!allowed} title={title}>
+                      {allowed ? 'Join Meeting' : 'Opens at start time'}
+                    </button>
+                  );
+                })()}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Accepted')}>Accept</button>}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Rescheduled')}>Reschedule</button>}
-                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Cancelled')}>Cancel</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Cancelled')} disabled={session.status === 'Cancelled' || session.status === 'Completed'}>Cancel</button>}
                 {canTeach && role === 'mentor' && <button className="primary" onClick={() => completeSession(session)} disabled={session.status === 'Cancelled'}>Complete</button>}
               </div>
             </div>
