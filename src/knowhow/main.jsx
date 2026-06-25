@@ -5735,8 +5735,14 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
                   {report.adminNote && <p className="muted-text"><em>Admin note: {report.adminNote}</em></p>}
                 </div>
                 <div className="actions inline">
-                  <button className="success" type="button" onClick={() => updateReportStatus(report.id, 'resolved')}>Mark Resolved</button>
-                  <button className="danger" type="button" onClick={() => updateReportStatus(report.id, 'dismissed')}>Dismiss</button>
+                  {String(report.status || 'pending').toLowerCase() === 'pending' ? (
+                    <>
+                      <button className="success" type="button" onClick={() => updateReportStatus(report.id, 'resolved')}>Mark Resolved</button>
+                      <button className="danger" type="button" onClick={() => updateReportStatus(report.id, 'dismissed')}>Dismiss</button>
+                    </>
+                  ) : (
+                    <button className="ghost" type="button" onClick={() => updateReportStatus(report.id, 'pending')}>Reopen</button>
+                  )}
                 </div>
               </div>
             ))}
