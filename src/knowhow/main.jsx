@@ -2757,6 +2757,21 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
         <StatCard label="Loan Balance" value={outstandingLoan} hint={wallet.loanDueDate ? `Due ${wallet.loanDueDate}` : 'No active loan'} />
       </div>
       {walletNotice && <div className="notice">{walletNotice}</div>}
+      <div className="card">
+        <h3>Daily Credit Reward</h3>
+        <p className="muted-text">Claim a free credit bonus every day. Keep your streak alive for bigger rewards (cap +0.55 at a 7-day streak).</p>
+        <div className="stats-grid">
+          <StatCard label="Current Streak" value={`${dailyState.streak || 0} day${(dailyState.streak || 0) === 1 ? '' : 's'}`} hint={alreadyClaimed ? `Last claimed ${dailyState.lastClaim}` : 'Claim today to grow it'} />
+          <StatCard label="Today's Reward" value={`+${rewardAmount}`} hint={alreadyClaimed ? 'Already claimed today' : `Day ${nextStreak} bonus available`} />
+          <StatCard label="Max Streak Bonus" value="+0.55" hint="Reach a 7-day streak" />
+        </div>
+        <div className="actions wrap">
+          <button className="primary" type="button" onClick={claimDailyReward} disabled={alreadyClaimed}>
+            {alreadyClaimed ? 'Claimed Today' : `Claim +${rewardAmount} Credits`}
+          </button>
+        </div>
+      </div>
+
       <div className="two-col">
         <div className="card">
           <h3>Loan Credit</h3>
