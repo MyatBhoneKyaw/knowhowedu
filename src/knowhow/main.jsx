@@ -3680,6 +3680,10 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
           </div>
         </div>
       )}
+      {sessionEndAd && (
+        <AdOverlay ad={sessionEndAd} placement="After session" onClose={() => setSessionEndAd(null)} />
+      )}
+
     </section>
   );
 }
