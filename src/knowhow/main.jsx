@@ -4,6 +4,7 @@ import './styles.css';
 import knowhowLogo from './knowhow-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable';
+import { NotificationBell, notify } from './notifications.jsx';
 
 
 // Lovable Cloud (Supabase) backend — replaces the legacy MongoDB API.
@@ -2029,7 +2030,7 @@ function App() {
   return (
     <div className={`app ${user.theme === 'dark' ? 'dark' : ''}`}>
       {authToast && <SuccessToast message={authToast} />}
-      <Sidebar page={page} setPage={setPage} user={user} level={level} navSearchQuery={navSearchQuery} setNavSearchQuery={setNavSearchQuery} unreadMessages={messages.filter((m) => m.unread).length} />
+      <Sidebar page={page} setPage={setPage} user={user} level={level} navSearchQuery={navSearchQuery} setNavSearchQuery={setNavSearchQuery} unreadMessages={messages.filter((m) => m.unread).length} sessions={sessions} />
       <main className="main main-with-nav-actions">
         {pages[page]}
       </main>
@@ -2282,7 +2283,7 @@ function useDailyRewardAvailable(userId) {
   return available;
 }
 
-function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery, unreadMessages = 0 }) {
+function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery, unreadMessages = 0, sessions = [] }) {
   const items = [
     ['dashboard', 'Home'],
     ['community', 'Community'],
@@ -2324,6 +2325,7 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
         })}
       </nav>
       <div className="topbar-actions nav-account-actions" aria-label="Account shortcuts">
+        <NotificationBell userId={user.id} sessions={sessions} />
         <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
           {dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}
           <span className="credit-balance-icon" aria-hidden="true">◎</span>
@@ -3282,6 +3284,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     setSessionNotice('');
     if (!window.confirm('Cancel and delete this session? This cannot be undone.')) return;
     setSessions((current) => current.filter((s) => s.id !== session.id));
+    notify(user.id, { category: 'reschedule', title: 'Session cancelled', body: `${session.topic || 'Your session'} on ${session.date || 'TBA'} ${session.time || ''} was cancelled.` });
     apiRequest(`/sessions/${session.id}`, { method: 'DELETE' })
       .then(() => setSessionNotice('Session cancelled and removed.'))
       .catch((err) => setSessionNotice(`Removed locally but cloud delete failed: ${err.message}.`));
@@ -3321,6 +3324,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       status: 'Rescheduled',
     } : s));
     setRescheduleTarget(null);
+    notify(user.id, { category: 'reschedule', title: 'Session rescheduled', body: `${rescheduleTarget.topic || 'Session'} moved to ${date} ${time} (${minutes} min).` });
     try {
       await apiRequest(`/sessions/${id}/reschedule`, { method: 'PATCH', body: JSON.stringify({ date, time, durationMinutes: minutes }) });
       setSessionNotice('Session rescheduled. Learners will see the updated time.');
@@ -3530,6 +3534,11 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
           title: `Teaching ${session.topic} • ${s.minutes} min verified • ${formatCredits(s.credits)} credits from ${s.learner}`,
           amount: s.credits, date: nowIso.slice(0, 10),
         }));
+        settlements.forEach((s) => notify(user.id, {
+          category: 'credit-gain',
+          title: `+${formatCredits(s.credits)} credits earned`,
+          body: `${s.learner} attended ${s.minutes} verified min of ${session.topic}.`,
+        }));
         nextUser = { ...user, wallet: nextWallet };
       } else {
         const mine = settlements.find((s) => s.learner === user.fullName);
@@ -3543,6 +3552,11 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
             id: crypto.randomUUID(), type: 'Spent',
             title: `Learning ${session.topic} • ${mine.minutes} min verified • ${formatCredits(mine.credits)} credits`,
             amount: -mine.credits, date: nowIso.slice(0, 10),
+          });
+          notify(user.id, {
+            category: 'credit-loss',
+            title: `-${formatCredits(mine.credits)} credits spent`,
+            body: `${mine.minutes} verified min of ${session.topic}.`,
           });
           nextUser = { ...user, wallet: nextWallet };
         }
@@ -5566,6 +5580,13 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
     try {
       await adminApiRequest(`/admin/reports/${id}`, { method: 'PATCH', body: JSON.stringify({ status, adminNote: '' }) });
       setReportsNotice(`Report ${status}.`);
+      const report = reports.find((r) => r.id === id);
+      const targets = [report?.reporterId, report?.reportedUserId].filter(Boolean);
+      targets.forEach((uid) => notify(uid, {
+        category: 'report',
+        title: `Report ${status}`,
+        body: report?.reason ? `Admin updated a report you’re involved in: "${report.reason}".` : 'An admin updated a report you’re involved in.',
+      }));
       await loadReports();
     } catch (error) {
       setReportsNotice(`Failed to update report: ${error.message}`);
