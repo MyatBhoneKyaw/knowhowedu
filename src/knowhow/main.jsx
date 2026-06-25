@@ -5925,52 +5925,51 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
       </div>
 
 
-      <div className="two-col">
-        <div className="card">
-          <details className="user-mgmt-dropdown">
-            <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', listStyle: 'none' }}>
-              <h3 style={{ margin: 0 }}>Teacher / License Review</h3>
-              <span className="muted-text" style={{ fontSize: 13 }}>{normalizedApplications.length} application(s) ▾</span>
-            </summary>
-            <div className="list" style={{ marginTop: 12 }}>
-              {normalizedApplications.length === 0 && <p className="muted-text">No teaching applications yet.</p>}
-              {normalizedApplications.map((item) => (
-                <div className={`skill-row selectable ${selectedApplicationId === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedApplicationId(item.id)}>
-                  <div><strong>{item.userName}</strong><span>{item.subject} • {item.requestedRole} • {item.status} • Submitted {String(item.submittedAt || '').slice(0, 10)}</span></div>
-                  <button className="primary" type="button">View</button>
-                </div>
-              ))}
-            </div>
-          </details>
-        </div>
-        <div className="card">
-          {selectedApplication ? (
-            <>
-              <div className="section-title"><h3>Review Detail</h3><StatusBadge status={selectedApplication.status} /></div>
-              <div className="profile-head"><Avatar text={getInitials(selectedApplication.userName)} /><div><h2>{selectedApplication.userName}</h2><p>@{selectedApplication.username} • {selectedApplication.email}</p></div></div>
-              <p><strong>Subject:</strong> {selectedApplication.subject}</p>
-              <p><strong>Requested role:</strong> {selectedApplication.requestedRole}</p>
-              <p><strong>Learner level:</strong> {selectedApplication.learnerLevel || 'Not provided'}</p>
-              <p><strong>Teacher level claim:</strong> {selectedApplication.teacherLevelClaim}</p>
-              <p><strong>Authority:</strong> {selectedApplication.authorityName || 'Not provided'}</p>
-              <div className="proof-list">
-                <MiniPill title="LinkedIn" text={selectedApplication.linkedInUrl || 'Not provided'} />
-                <MiniPill title="CV / Portfolio" text={selectedApplication.cvUrl || 'Not provided'} />
-                <MiniPill title="License Proof" text={selectedApplication.licenseUrl || 'Not provided'} />
+      <div className="card">
+        <details className="user-mgmt-dropdown">
+          <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', listStyle: 'none' }}>
+            <h3 style={{ margin: 0 }}>Teacher / License Review</h3>
+            <span className="muted-text" style={{ fontSize: 13 }}>{normalizedApplications.length} application(s) ▾</span>
+          </summary>
+          <div className="list" style={{ marginTop: 12 }}>
+            {normalizedApplications.length === 0 && <p className="muted-text">No teaching applications yet.</p>}
+            {normalizedApplications.map((item) => (
+              <div className={`skill-row selectable ${selectedApplicationId === item.id ? 'selected' : ''}`} key={item.id} onClick={() => { setSelectedApplicationId(item.id); setApplicationModalOpen(true); }}>
+                <div><strong>{item.userName}</strong><span>{item.subject} • {item.requestedRole} • {item.status} • Submitted {String(item.submittedAt || '').slice(0, 10)}</span></div>
+                <button className="primary" type="button" onClick={(e) => { e.stopPropagation(); setSelectedApplicationId(item.id); setApplicationModalOpen(true); }}>View</button>
               </div>
-              <label>Admin review note</label>
-              <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} placeholder="Write why you approved/rejected or what info is missing." />
-              <div className="actions wrap">
-                <button className="success" onClick={() => reviewApplication(selectedApplication.id, 'Approved')}>Accept</button>
-                <button className="danger" onClick={() => reviewApplication(selectedApplication.id, 'Rejected')}>Reject</button>
-                <button className="ghost" onClick={() => reviewApplication(selectedApplication.id, 'Needs More Info')}>Need More Info</button>
-              </div>
-              <h3>Review Trail</h3>
-              <div className="list compact-view">{(selectedApplication.reviewTrail || []).map((trail, index) => <MiniPill key={`${trail.at}-${index}`} title={trail.action} text={`${String(trail.at).slice(0, 16)} • ${trail.by}${trail.note ? ` • ${trail.note}` : ''}`} />)}</div>
-            </>
-          ) : <p className="muted-text">Select an application to review.</p>}
-        </div>
+            ))}
+          </div>
+        </details>
       </div>
+      {applicationModalOpen && selectedApplication && (
+        <div className="modal-backdrop high-modal-backdrop" onClick={() => setApplicationModalOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="section-title"><h3>Review Detail</h3><StatusBadge status={selectedApplication.status} /></div>
+            <div className="profile-head"><Avatar text={getInitials(selectedApplication.userName)} /><div><h2>{selectedApplication.userName}</h2><p>@{selectedApplication.username} • {selectedApplication.email}</p></div></div>
+            <p><strong>Subject:</strong> {selectedApplication.subject}</p>
+            <p><strong>Requested role:</strong> {selectedApplication.requestedRole}</p>
+            <p><strong>Learner level:</strong> {selectedApplication.learnerLevel || 'Not provided'}</p>
+            <p><strong>Teacher level claim:</strong> {selectedApplication.teacherLevelClaim}</p>
+            <p><strong>Authority:</strong> {selectedApplication.authorityName || 'Not provided'}</p>
+            <div className="proof-list">
+              <MiniPill title="LinkedIn" text={selectedApplication.linkedInUrl || 'Not provided'} />
+              <MiniPill title="CV / Portfolio" text={selectedApplication.cvUrl || 'Not provided'} />
+              <MiniPill title="License Proof" text={selectedApplication.licenseUrl || 'Not provided'} />
+            </div>
+            <label>Admin review note</label>
+            <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} placeholder="Write why you approved/rejected or what info is missing." />
+            <div className="actions wrap">
+              <button className="success" onClick={() => { reviewApplication(selectedApplication.id, 'Approved'); setApplicationModalOpen(false); }}>Accept</button>
+              <button className="danger" onClick={() => { reviewApplication(selectedApplication.id, 'Rejected'); setApplicationModalOpen(false); }}>Reject</button>
+              <button className="ghost" onClick={() => { reviewApplication(selectedApplication.id, 'Needs More Info'); setApplicationModalOpen(false); }}>Need More Info</button>
+              <button className="ghost" onClick={() => setApplicationModalOpen(false)}>Close</button>
+            </div>
+            <h3>Review Trail</h3>
+            <div className="list compact-view">{(selectedApplication.reviewTrail || []).map((trail, index) => <MiniPill key={`${trail.at}-${index}`} title={trail.action} text={`${String(trail.at).slice(0, 16)} • ${trail.by}${trail.note ? ` • ${trail.note}` : ''}`} />)}</div>
+          </div>
+        </div>
+      )}
       <div className="card">
         <div className="section-title"><h3>User Reports</h3><span className="pill muted">{reports.length} report(s)</span></div>
         {reportsNotice && <div className="notice">{reportsNotice}</div>}
