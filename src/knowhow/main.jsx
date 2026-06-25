@@ -83,13 +83,22 @@ function normalizeBackendUser(apiUser, wallet) {
 function profileRowToApiUser(row, roleRow) {
   if (!row) return null;
   const profile = row.profile || {};
+  const sysRole = roleRow?.role;
+  const rawRole = row.raw_role;
+  // Admin from user_roles always wins. Otherwise prefer the granular raw_role
+  // (e.g. teacher, assistant_teacher) over the basic 'user' enum value.
+  let role;
+  if (sysRole === 'admin') role = 'admin';
+  else if (rawRole && rawRole !== 'learner') role = rawRole;
+  else role = sysRole || rawRole || 'learner';
   return {
     _id: row.id,
     id: row.id,
     fullName: row.full_name,
     username: row.username,
     email: row.email,
-    role: roleRow?.role || row.raw_role || 'learner',
+    role,
+    rawRole: rawRole || 'learner',
     profile,
     learningProfile: row.learning_profile || {},
     teachingProfile: row.teaching_profile || {},
