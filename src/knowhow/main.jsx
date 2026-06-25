@@ -1430,6 +1430,59 @@ function App() {
   const [adminMode, setAdminMode] = useState(() => isAdminRoute() || Boolean(localStorage.getItem('knowhow-admin-token')));
   const [authToast, setAuthToast] = useState('');
   const [navSearchQuery, setNavSearchQuery] = useState('');
+  const [cloudPeople, setCloudPeople] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCloudPeople() {
+      try {
+        const profiles = await apiRequest('/users', { query: '' });
+        if (cancelled || !Array.isArray(profiles)) return;
+        const mapped = profiles
+          .filter((p) => p && p.id && (p.username || p.fullName))
+          .map((p) => {
+            const prof = p.profile || {};
+            const initials = (p.fullName || p.username || '?')
+              .split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+            return {
+              id: p.id,
+              fullName: p.fullName || p.username,
+              username: p.username || (p.email || '').split('@')[0],
+              avatar: initials || '?',
+              bio: prof.bio || 'Know-how community member.',
+              region: prof.region || '',
+              languages: prof.languages || [],
+              interests: prof.interests || [],
+              reputation: p.xp || 0,
+              rating: Number(p.averageRating || 0) || 5,
+              completion: 100,
+              hoursShared: 0,
+              offered: prof.skillsOffered || [],
+              wanted: prof.skillsWanted || [],
+              email: p.email,
+              isCloudUser: true,
+            };
+          });
+        setCloudPeople(mapped);
+      } catch (e) {
+        // silent; fallback to seed PEOPLE
+      }
+    }
+    loadCloudPeople();
+    return () => { cancelled = true; };
+  }, [loggedIn]);
+
+  const allPeople = useMemo(() => {
+    const map = new Map();
+    [...PEOPLE, ...cloudPeople].forEach((p) => {
+      const key = (p.username || p.id || '').toLowerCase();
+      if (!key) return;
+      if (!map.has(key)) map.set(key, p);
+    });
+    // exclude current logged-in user from search list
+    if (user?.username) map.delete(user.username.toLowerCase());
+    return Array.from(map.values());
+  }, [cloudPeople, user?.username]);
 
   useEffect(() => {
     const syncAdminRoute = () => setAdminMode(isAdminRoute() || Boolean(localStorage.getItem('knowhow-admin-token')));
