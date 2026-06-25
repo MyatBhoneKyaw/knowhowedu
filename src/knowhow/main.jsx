@@ -2959,6 +2959,13 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [showDialog, setShowDialog] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
+  const meetingRoomRef = useRef(null);
+  function toggleMeetingFullscreen() {
+    const el = meetingRoomRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.();
+  }
   const [rescheduleTarget, setRescheduleTarget] = useState(null);
   const [rescheduleDraft, setRescheduleDraft] = useState({ date: '', time: '', durationMinutes: 30 });
   const [sessionSearch, setSessionSearch] = useState('');
