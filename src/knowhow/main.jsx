@@ -1886,13 +1886,33 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    async function hydrateFromSupabase() {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (!accessToken) return false;
+        localStorage.setItem('knowhow-token', accessToken);
+        const me = await apiRequest('/auth/me');
+        if (cancelled) return true;
+        const normalized = normalizeBackendUser(me.user, me.wallet);
+        const nextUser = { ...normalized, wallet: normalizeWallet(normalized.wallet) };
+        setUser(nextUser);
+        saveState(nextUser, sessions, transactions);
+        setLoggedIn(true);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     async function loadCurrentUser() {
       const token = localStorage.getItem('knowhow-token');
       if (!token) {
-        setAuthLoading(false);
+        const hydrated = await hydrateFromSupabase();
+        if (!cancelled) setAuthLoading(false);
         return;
       }
-
       try {
         const data = await apiRequest('/auth/me');
         const normalized = normalizeBackendUser(data.user, data.wallet);
@@ -1903,13 +1923,29 @@ function App() {
       } catch (error) {
         localStorage.removeItem('knowhow-token');
         localStorage.removeItem('knowhow-user');
-        setLoggedIn(false);
+        const hydrated = await hydrateFromSupabase();
+        if (!hydrated && !cancelled) setLoggedIn(false);
       } finally {
-        setAuthLoading(false);
+        if (!cancelled) setAuthLoading(false);
       }
     }
 
     loadCurrentUser();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.access_token) {
+        hydrateFromSupabase();
+      }
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('knowhow-token');
+        localStorage.removeItem('knowhow-user');
+        setLoggedIn(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
