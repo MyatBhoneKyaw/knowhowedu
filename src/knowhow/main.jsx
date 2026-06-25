@@ -4746,7 +4746,30 @@ function SettingsPage({ user, setUser, onLogout }) {
   const [passwordDraft, setPasswordDraft] = useState({ old: '', next: '', confirm: '' });
   const [settingsNotice, setSettingsNotice] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [subscriptionPlan, setSubscriptionPlan] = useState('Free');
+  const subscriptionStorageKey = `knowhow:subscription:${user?.id || 'guest'}`;
+  const [subscriptionState, setSubscriptionState] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(subscriptionStorageKey);
+      return raw ? JSON.parse(raw) : { plan: 'Free', expiresAt: null, lastTrialAt: null };
+    } catch { return { plan: 'Free', expiresAt: null, lastTrialAt: null }; }
+  });
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(subscriptionStorageKey);
+      setSubscriptionState(raw ? JSON.parse(raw) : { plan: 'Free', expiresAt: null, lastTrialAt: null });
+    } catch { setSubscriptionState({ plan: 'Free', expiresAt: null, lastTrialAt: null }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+  useEffect(() => {
+    try { window.localStorage.setItem(subscriptionStorageKey, JSON.stringify(subscriptionState)); } catch {}
+  }, [subscriptionStorageKey, subscriptionState]);
+  // auto-expire
+  const nowTs = Date.now();
+  const activePlan = (subscriptionState.expiresAt && subscriptionState.expiresAt < nowTs)
+    ? 'Free'
+    : (subscriptionState.plan || 'Free');
+  const subscriptionPlan = activePlan;
+  const setSubscriptionPlan = (plan) => setSubscriptionState((s) => ({ ...s, plan, expiresAt: null }));
   const paymentStorageKey = `knowhow:payment-methods:${user?.id || 'guest'}`;
   const [paymentMethods, setPaymentMethods] = useState(() => {
     try {
@@ -5030,37 +5053,82 @@ function SettingsPage({ user, setUser, onLogout }) {
     }
 
     if (activeSection === 'subscription') {
+      const sharedPerks = ['Remove ads', 'Increase daily credit reward', 'Increase XP gain', 'Priority lecture video access'];
       const plans = [
-        { name: 'Free', price: '$0', note: 'Core learning access', perks: ['Community posts and comments', 'Basic messaging', 'Standard daily credit reward', 'Standard XP growth'] },
-        { name: 'Premium', price: '$6.99', note: 'For active learners and teachers', perks: ['Remove ads', 'Increase daily credit reward', 'Increase XP gain', 'Priority lecture video access'] },
+        { name: 'Free', priceLabel: '0 credits', priceCredits: 0, durationDays: 0, note: 'Core learning access', perks: ['Community posts and comments', 'Basic messaging', 'Standard daily credit reward', 'Standard XP growth'] },
+        { name: 'Trial', priceLabel: '50 credits / 1 week', priceCredits: 50, durationDays: 7, note: 'Try Premium for a week (once per month)', perks: sharedPerks },
+        { name: 'Premium', priceLabel: '100 credits / 1 month', priceCredits: 100, durationDays: 30, note: 'For active learners and teachers', perks: sharedPerks },
       ];
+      const expiresLabel = subscriptionState.expiresAt ? new Date(subscriptionState.expiresAt).toLocaleDateString() : null;
+      const lastTrialAt = subscriptionState.lastTrialAt ? new Date(subscriptionState.lastTrialAt) : null;
+      const trialCooldownUntil = lastTrialAt ? new Date(lastTrialAt.getTime() + 30 * 86400000) : null;
+      const trialOnCooldown = trialCooldownUntil && trialCooldownUntil.getTime() > nowTs;
       return (
         <div className="settings-panel-card subscription-settings-panel">
           <div className="settings-section-head">
-            <div><h2>Subscription</h2><p>Choose between Free and Premium. Premium removes ads and boosts rewards.</p></div>
-            <span className="pill muted">Current: {subscriptionPlan}</span>
+            <div><h2>Subscription</h2><p>Choose between Free, Trial, and Premium. Trial and Premium remove ads and boost rewards.</p></div>
+            <span className="pill muted">Current: {subscriptionPlan}{expiresLabel ? ` (until ${expiresLabel})` : ''}</span>
           </div>
           <div className="subscription-plan-grid">
             {plans.map((plan) => {
               const isActive = subscriptionPlan === plan.name;
-              const isPaid = plan.name !== 'Free';
-              const handlePurchase = () => {
-                if (isPaid && paymentMethods.length === 0) {
-                  setSettingsNotice('Add a payment method to subscribe to Premium.');
-                  setPaymentModal({ mode: 'add', index: -1, draft: { brand: 'Visa', holder: '', last4: '', expiry: '' } });
+              const isTrial = plan.name === 'Trial';
+              const isPaid = plan.priceCredits > 0;
+              const disabled = isActive || (isTrial && trialOnCooldown);
+              const handlePurchase = async () => {
+                setSettingsNotice('');
+                if (!isPaid) {
+                  setSubscriptionState({ plan: 'Free', expiresAt: null, lastTrialAt: subscriptionState.lastTrialAt });
+                  setSettingsNotice('Switched to Free plan.');
                   return;
                 }
-                setSubscriptionPlan(plan.name);
-                setSettingsNotice(isPaid ? `${plan.name} subscription activated — ${plan.price} charged to •••• ${paymentMethods[0]?.last4 || '----'}.` : 'Switched to Free plan.');
+                if (isTrial && trialOnCooldown) {
+                  setSettingsNotice(`Trial can only be purchased once per month. Available again on ${trialCooldownUntil.toLocaleDateString()}.`);
+                  return;
+                }
+                const currentCredits = Number(user.wallet?.current || 0);
+                if (currentCredits < plan.priceCredits) {
+                  setSettingsNotice(`You need ${plan.priceCredits} credits to activate ${plan.name}. You currently have ${currentCredits}.`);
+                  return;
+                }
+                try {
+                  const nextCurrent = Number((currentCredits - plan.priceCredits).toFixed(2));
+                  const nextSpent = Number((Number(user.wallet?.spent || 0) + plan.priceCredits).toFixed(2));
+                  const { error: walletError } = await supabase
+                    .from('wallets')
+                    .update({ current_credits: nextCurrent, spent_credits: nextSpent, updated_at: new Date().toISOString() })
+                    .eq('user_id', user.id);
+                  if (walletError) throw walletError;
+                  await supabase.from('credit_transactions').insert({
+                    user_id: user.id,
+                    amount: -plan.priceCredits,
+                    type: 'spent',
+                    description: `${plan.name} subscription`,
+                    balance_after: nextCurrent,
+                  });
+                  setUser((current) => ({
+                    ...current,
+                    wallet: normalizeWallet({ ...current.wallet, current: nextCurrent, spent: nextSpent }),
+                  }));
+                  const expiresAt = Date.now() + plan.durationDays * 86400000;
+                  setSubscriptionState({
+                    plan: plan.name,
+                    expiresAt,
+                    lastTrialAt: isTrial ? Date.now() : subscriptionState.lastTrialAt,
+                  });
+                  setSettingsNotice(`${plan.name} activated — ${plan.priceCredits} credits charged. Active until ${new Date(expiresAt).toLocaleDateString()}.`);
+                } catch (error) {
+                  setSettingsNotice(`Could not activate ${plan.name}: ${error.message || error}`);
+                }
               };
               return (
                 <div key={plan.name} role="group" className={isActive ? 'subscription-card active' : 'subscription-card'}>
                   <span>{plan.name}</span>
-                  <strong>{plan.price}</strong>
+                  <strong>{plan.priceLabel}</strong>
                   <small>{plan.note}</small>
                   <ul>{plan.perks.map((perk) => <li key={perk}>✓ {perk}</li>)}</ul>
-                  <button type="button" className="primary" style={{ marginTop: 12, width: '100%' }} onClick={handlePurchase} disabled={isActive}>
-                    {isActive ? 'Current Plan' : (isPaid ? `Purchase ${plan.price}` : 'Switch to Free')}
+                  <button type="button" className="primary" style={{ marginTop: 12, width: '100%' }} onClick={handlePurchase} disabled={disabled}>
+                    {isActive ? 'Current Plan' : (!isPaid ? 'Switch to Free' : (isTrial && trialOnCooldown ? `Available ${trialCooldownUntil.toLocaleDateString()}` : `Purchase ${plan.priceCredits} credits`))}
                   </button>
                 </div>
               );
