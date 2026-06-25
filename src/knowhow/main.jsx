@@ -676,7 +676,9 @@ async function getUserByUsername(username) {
 // =====================================================================
 async function apiRequest(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
-  const body = options.body ? JSON.parse(options.body) : undefined;
+  const body = options.body
+    ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body)
+    : undefined;
   const m = (re) => path.match(re);
 
   // Auth
