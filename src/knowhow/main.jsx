@@ -3593,7 +3593,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
                 allowFullScreen
               />
             </div>
-            <p className="muted-text">You joined as {getParticipantRole(activeMeeting, user)}. Credits are settled automatically when you leave, based on verified overlap minutes (only counted when at least one mentor and one learner are both in the room).</p>
+            
             <LiveAttendanceSummary activeMeeting={activeMeeting} />
             <button className="danger full" onClick={leaveMeeting}>Leave Meeting</button>
           </div>
