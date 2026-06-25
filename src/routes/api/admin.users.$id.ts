@@ -20,7 +20,11 @@ export const Route = createFileRoute("/api/admin/users/$id")({
         await requireAdmin(request);
         const body = await request.json().catch(() => ({}));
         const admin = adminClient();
-        const updates: Record<string, unknown> = {};
+        const updates: {
+          is_suspended?: boolean;
+          full_name?: string;
+          raw_role?: string;
+        } = {};
         if (typeof body.suspend === "boolean") updates.is_suspended = body.suspend;
         if (typeof body.fullName === "string") updates.full_name = body.fullName;
         if (typeof body.role === "string") updates.raw_role = body.role;
