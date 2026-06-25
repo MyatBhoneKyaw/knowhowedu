@@ -4913,6 +4913,9 @@ function VideoPanelPage({ user, setUser }) {
   const [videoSearch, setVideoSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeVideo, setActiveVideo] = useState(null);
+  const [pendingVideo, setPendingVideo] = useState(null);
+  const [videoAd, setVideoAd] = useState(null);
+
   const [videoNotice, setVideoNotice] = useState('');
   const [view, setView] = useState('browse');
   const [uploadedVideos, setUploadedVideos] = useState([]);
