@@ -2074,6 +2074,8 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
     ['settings', 'Settings'],
   ];
 
+  const dailyAvailable = useDailyRewardAvailable(user.id);
+
   function submitSearch(event) {
     event.preventDefault();
     if (!String(navSearchQuery || '').trim()) return;
