@@ -3639,7 +3639,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
       <div className="messages-layout card messenger-flex-shell">
         <aside className="messages-contact-panel">
           <div className="messages-panel-head messenger-title-row simple-messenger-title-row">
-            <div><strong>Messenger</strong><span>{filteredContacts.length} conversation(s)</span></div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'nowrap' }}><strong>Messenger</strong><span>{filteredContacts.length} conversation(s)</span></div>
           </div>
           <input className="compact-input messenger-search-input" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Search people or groups" />
           <div className="chat-filter-row"><button type="button" className={activeFilter === 'inbox' ? 'active' : ''} onClick={() => setActiveFilter('inbox')}>Inbox</button><button type="button" className={activeFilter === 'people' ? 'active' : ''} onClick={() => setActiveFilter('people')}>People</button></div>
