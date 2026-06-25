@@ -3974,9 +3974,9 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
         const localOnly = normalizedApplications.filter((item) => item.source !== 'backend' && !normalizedBackend.some((backendItem) => backendItem.id === item.id));
         setTeacherApplications([...normalizedBackend, ...localOnly]);
         if (normalizedBackend[0]) setSelectedApplicationId(normalizedBackend[0].id);
-        setAdminNotice('Backend teacher applications loaded. Admin review is connected to API when MongoDB/server are running.');
+        setAdminNotice('Teacher applications loaded from Lovable Cloud.');
       } catch (error) {
-        setAdminNotice('Using local demo review data. Backend admin review will work after logging in with a real admin token and running MongoDB/server.');
+        setAdminNotice('Could not load applications from Lovable Cloud. Showing local demo data.');
       }
     }
     loadRealApplications();
