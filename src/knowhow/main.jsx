@@ -1201,8 +1201,9 @@ const INITIAL_COMMUNITY_POSTS = [
 const INITIAL_QUESTS = [];
 
 const CREDIT_PRODUCTS = [
-  { id: 'cp01', title: '5 Credit Points', credits: 5, price: '$5 demo', productType: 'credit_points' },
-  { id: 'cp02', title: 'Lecture Video Pack', credits: 0, price: '$9 demo', productType: 'lecture_video' },
+  { id: 'cp01', title: '1 Credit Point', credits: 1, price: '$5', productType: 'credit_points' },
+  { id: 'cp02', title: '3 Credit Points', credits: 3, price: '$14', productType: 'credit_points' },
+  { id: 'cp03', title: '5 Credit Points', credits: 5, price: '$22', productType: 'credit_points' },
 ];
 
 const LECTURE_VIDEOS = [
@@ -2717,12 +2718,11 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
           <div className="list">
             {CREDIT_PRODUCTS.map((product) => (
               <div className="skill-row" key={product.id}>
-                <div><strong>{product.title}</strong><span>{product.price} • {product.credits ? `${product.credits} credits` : 'lecture video access'}</span></div>
+                <div><strong>{product.title}</strong><span>{product.price} • {product.credits} credit{product.credits === 1 ? '' : 's'}</span></div>
                 <button className="primary" type="button" onClick={() => openPayment(product)}>Buy</button>
               </div>
             ))}
           </div>
-          <div className="summary-box"><strong>Lecture video access:</strong> {wallet.lectureAccess || 0}</div>
         </div>
       </div>
       <div className="card credit-history-card">
@@ -2749,7 +2749,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
             </div>
             <div className="summary-box">
               <strong>{paymentProduct.title}</strong>
-              <span>{paymentProduct.price} - {paymentProduct.credits ? `${paymentProduct.credits} credits` : 'lecture video access'}</span>
+              <span>{paymentProduct.price} - {paymentProduct.credits} credit{paymentProduct.credits === 1 ? '' : 's'}</span>
             </div>
             <label>Name on Card</label>
             <input value={paymentDraft.name} onChange={(event) => setPaymentDraft({ ...paymentDraft, name: event.target.value })} placeholder="Cardholder name" autoComplete="cc-name" required />
