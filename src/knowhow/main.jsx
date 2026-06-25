@@ -5531,11 +5531,14 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
   useEffect(() => { loadReports(); }, []);
 
   async function updateReportStatus(id, status) {
+    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
     try {
       await adminApiRequest(`/admin/reports/${id}`, { method: 'PATCH', body: JSON.stringify({ status, adminNote: '' }) });
+      setReportsNotice(`Report ${status}.`);
       await loadReports();
     } catch (error) {
       setReportsNotice(`Failed to update report: ${error.message}`);
+      await loadReports();
     }
   }
   const selectedUser = adminUsers.find((item) => item.id === selectedUserId) || adminUsers[0];
@@ -5732,8 +5735,14 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
                   {report.adminNote && <p className="muted-text"><em>Admin note: {report.adminNote}</em></p>}
                 </div>
                 <div className="actions inline">
-                  <button className="success" type="button" onClick={() => updateReportStatus(report.id, 'resolved')}>Mark Resolved</button>
-                  <button className="danger" type="button" onClick={() => updateReportStatus(report.id, 'dismissed')}>Dismiss</button>
+                  {String(report.status || 'pending').toLowerCase() === 'pending' ? (
+                    <>
+                      <button className="success" type="button" onClick={() => updateReportStatus(report.id, 'resolved')}>Mark Resolved</button>
+                      <button className="danger" type="button" onClick={() => updateReportStatus(report.id, 'dismissed')}>Dismiss</button>
+                    </>
+                  ) : (
+                    <button className="ghost" type="button" onClick={() => updateReportStatus(report.id, 'pending')}>Reopen</button>
+                  )}
                 </div>
               </div>
             ))}
