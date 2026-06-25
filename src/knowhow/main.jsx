@@ -5364,7 +5364,21 @@ function VideoPanelPage({ user, setUser }) {
           <div className="modal card video-watch-modal">
             <div className="section-title"><h3>{activeVideo.title}</h3><button className="ghost" type="button" onClick={() => setActiveVideo(null)}>Close</button></div>
             {activeVideo.videoUrl ? (
-              <video className="video-player-frame" src={activeVideo.videoUrl} poster={activeVideo.poster} controls autoPlay style={{ width: '100%', borderRadius: 12, background: '#000' }} />
+              <video
+                key={activeVideo.id}
+                className="video-player-frame"
+                poster={activeVideo.poster}
+                controls
+                autoPlay
+                playsInline
+                preload="metadata"
+                crossOrigin="anonymous"
+                style={{ width: '100%', maxHeight: '70vh', aspectRatio: '16/9', borderRadius: 12, background: '#000', display: 'block' }}
+                onError={(e) => { console.warn('video error', activeVideo.videoUrl, e?.currentTarget?.error); }}
+              >
+                <source src={activeVideo.videoUrl} type="video/mp4" />
+                Your browser cannot play this video. <a href={activeVideo.videoUrl} target="_blank" rel="noreferrer">Open in new tab</a>
+              </video>
             ) : (
               <div className="video-player-placeholder"><span>▶</span><strong>Lecture video preview</strong><small>{activeVideo.duration} • Teacher: {activeVideo.teacher}</small></div>
             )}
