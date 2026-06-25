@@ -5867,12 +5867,27 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
       await adminApiRequest(`/admin/reports/${id}`, { method: 'PATCH', body: JSON.stringify({ status, adminNote: '' }) });
       setReportsNotice(`Report ${status}.`);
       const report = reports.find((r) => r.id === id);
-      const targets = [report?.reporterId, report?.reportedUserId].filter(Boolean);
-      targets.forEach((uid) => notify(uid, {
-        category: 'report',
-        title: `Report ${status}`,
-        body: report?.reason ? `Admin updated a report you’re involved in: "${report.reason}".` : 'An admin updated a report you’re involved in.',
-      }));
+      const reasonText = report?.reason ? `"${report.reason}"` : 'your report';
+      if (report?.reporterId) {
+        const reporterTitle = status === 'resolved'
+          ? 'Your report was resolved'
+          : status === 'dismissed'
+            ? 'Your report was dismissed'
+            : `Your report is now ${status}`;
+        const reporterBody = status === 'resolved'
+          ? `An admin reviewed and resolved ${reasonText}. Thanks for keeping the community safe.`
+          : status === 'dismissed'
+            ? `An admin reviewed ${reasonText} and dismissed it after investigation.`
+            : `An admin updated the status of ${reasonText} to ${status}.`;
+        await notify(report.reporterId, { category: 'report', title: reporterTitle, body: reporterBody });
+      }
+      if (report?.reportedUserId && report.reportedUserId !== report.reporterId) {
+        await notify(report.reportedUserId, {
+          category: 'report',
+          title: `A report involving you was ${status}`,
+          body: `An admin reviewed a report involving your account and marked it as ${status}.`,
+        });
+      }
       await loadReports();
     } catch (error) {
       setReportsNotice(`Failed to update report: ${error.message}`);
