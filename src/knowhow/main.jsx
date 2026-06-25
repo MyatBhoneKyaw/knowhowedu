@@ -3038,6 +3038,37 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [activeMeeting, setActiveMeeting] = useState(null);
   const [sessionEndAd, setSessionEndAd] = useState(null);
 
+  // Keep the active meeting in sync with the global sessions list (cloud polling refreshes attendance).
+  useEffect(() => {
+    if (!activeMeeting) return;
+    const fresh = sessions.find((s) => s.id === activeMeeting.id);
+    if (fresh && fresh !== activeMeeting) {
+      setActiveMeeting((curr) => (curr ? { ...curr, ...fresh } : curr));
+    }
+  }, [sessions, activeMeeting?.id]);
+
+  // While a meeting is open, poll that one session every 3s so the other participant's
+  // join/leave is reflected quickly (the global 15s feed poll is too slow for live counters).
+  useEffect(() => {
+    if (!activeMeeting?.id) return undefined;
+    const isCloud = activeMeeting.fromCloud || activeMeeting.cloudId || /^[0-9a-f-]{36}$/i.test(String(activeMeeting.id));
+    if (!isCloud) return undefined;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { data, error } = await supabase.from('sessions').select('*').eq('id', activeMeeting.id).maybeSingle();
+        if (cancelled || error || !data) return;
+        const merged = cloudToLocalSession(data);
+        if (!merged) return;
+        setSessions((curr) => curr.map((s) => (s.id === merged.id ? { ...s, ...merged } : s)));
+        setActiveMeeting((curr) => (curr && curr.id === merged.id ? { ...curr, ...merged } : curr));
+      } catch (_) { /* ignore */ }
+    };
+    const interval = window.setInterval(tick, 3000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [activeMeeting?.id]);
+
+
   const meetingRoomRef = useRef(null);
   function toggleMeetingFullscreen() {
     const el = meetingRoomRef.current;
