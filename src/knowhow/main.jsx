@@ -4099,7 +4099,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
 
         <section className="messages-chat-panel">
           <header className="messages-chat-header messenger-chat-title">
-            <div className="profile-head no-margin">
+            <div className="profile-head no-margin" style={{ cursor: activeProfile ? 'pointer' : 'default' }} onClick={() => { if (activeProfile) setChatProfileOpen(true); }}>
               <Avatar text={activeProfile?.avatar || getInitials(activeContact)} />
               <div><h3>{activeContact}</h3><p className="muted-text">{activeProfile ? `@${activeProfile.username} • ${activeProfile.region || 'Region hidden'}` : 'Community conversation'} • Active now</p></div>
             </div>
