@@ -9,11 +9,19 @@ export const Route = createFileRoute("/api/admin/teacher-applications/$id")({
         );
         await requireAdmin(request);
         const body = await request.json().catch(() => ({}));
+        const statusValue = String(body.status || "pending").toLowerCase();
+        const normalizedStatus = statusValue.includes("approve")
+          ? "approved"
+          : statusValue.includes("reject")
+            ? "rejected"
+            : statusValue.includes("info")
+              ? "needs_more_info"
+              : statusValue;
         const admin = adminClient();
         const { data, error } = await admin
           .from("teacher_applications")
           .update({
-            status: body.status || "pending",
+            status: normalizedStatus,
             admin_note: body.adminNote || null,
             reviewed_at: new Date().toISOString(),
           })
