@@ -5190,7 +5190,21 @@ function VideoPanelPage({ user, setUser }) {
   const [showUpload, setShowUpload] = useState(false);
   const [uploadForm, setUploadForm] = useState({ title: '', description: '', category: 'Design', level: 'Beginner', durationLabel: '15 min', priceCredits: 0, videoUrl: '', file: null });
   const isTeacher = canUserTeach(user);
+  const ownedKey = `knowhow:ownedVideos:${user.id}`;
   const purchasedVideos = user.purchasedVideos || [];
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(ownedKey) || '[]');
+      if (Array.isArray(stored) && stored.length && stored.join(',') !== purchasedVideos.join(',')) {
+        const merged = Array.from(new Set([...(user.purchasedVideos || []), ...stored]));
+        setUser({ ...user, purchasedVideos: merged });
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id]);
+  useEffect(() => {
+    try { localStorage.setItem(ownedKey, JSON.stringify(purchasedVideos)); } catch {}
+  }, [ownedKey, purchasedVideos.join(',')]);
   const allVideos = [...uploadedVideos, ...LECTURE_VIDEOS];
   const categories = ['All', ...Array.from(new Set(allVideos.map((video) => video.category)))];
   const normalizedSearch = normalizeText(videoSearch);
