@@ -14,6 +14,7 @@ import { Route as ApiQualificationsTeacherApplicationsRouteImport } from './rout
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth.register'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth.me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth.login'
+import { Route as ApiAdminTeacherApplicationsRouteImport } from './routes/api/admin.teacher-applications'
 import { Route as ApiUsersMeProfileRouteImport } from './routes/api/users.me.profile'
 import { Route as ApiAdminAuthLoginRouteImport } from './routes/api/admin.auth.login'
 
@@ -43,6 +44,12 @@ const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
   path: '/api/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminTeacherApplicationsRoute =
+  ApiAdminTeacherApplicationsRouteImport.update({
+    id: '/api/admin/teacher-applications',
+    path: '/api/admin/teacher-applications',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiUsersMeProfileRoute = ApiUsersMeProfileRouteImport.update({
   id: '/api/users/me/profile',
   path: '/api/users/me/profile',
@@ -56,6 +63,7 @@ const ApiAdminAuthLoginRoute = ApiAdminAuthLoginRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
@@ -65,6 +73,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
@@ -75,6 +84,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api/admin/teacher-applications'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
@@ -95,6 +106,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/admin/teacher-applications'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
@@ -104,6 +116,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/api/admin/teacher-applications'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
@@ -114,6 +127,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiAdminTeacherApplicationsRoute: typeof ApiAdminTeacherApplicationsRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
@@ -159,6 +173,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/teacher-applications': {
+      id: '/api/admin/teacher-applications'
+      path: '/api/admin/teacher-applications'
+      fullPath: '/api/admin/teacher-applications'
+      preLoaderRoute: typeof ApiAdminTeacherApplicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/users/me/profile': {
       id: '/api/users/me/profile'
       path: '/api/users/me/profile'
@@ -178,6 +199,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiAdminTeacherApplicationsRoute: ApiAdminTeacherApplicationsRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,

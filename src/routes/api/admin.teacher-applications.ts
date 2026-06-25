@@ -11,10 +11,16 @@ export const Route = createFileRoute("/api/admin/teacher-applications")({
         const admin = adminClient();
         const { data, error } = await admin
           .from("teacher_applications")
-          .select("*, user:profiles!teacher_applications_user_id_fkey(id, full_name, username, email)")
+          .select("*")
           .order("created_at", { ascending: false });
         if (error) return json({ message: error.message }, 400);
-        return json((data || []).map(shapeApplication));
+        const userIds = Array.from(new Set((data || []).map((a) => a.user_id)));
+        const { data: profiles } = userIds.length
+          ? await admin.from("profiles").select("id, full_name, username, email").in("id", userIds)
+          : { data: [] as any[] };
+        const byId = new Map((profiles || []).map((p) => [p.id, p]));
+        const merged = (data || []).map((a) => ({ ...a, user: byId.get(a.user_id) }));
+        return json(merged.map(shapeApplication));
       },
     },
   },
