@@ -3646,7 +3646,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
       <div className="messages-layout card messenger-flex-shell">
         <aside className="messages-contact-panel">
           <div className="messages-panel-head messenger-title-row simple-messenger-title-row">
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'nowrap' }}><strong>Messenger</strong></div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'nowrap' }}><strong>Chat</strong></div>
           </div>
           <div className="messenger-search-wrap">
             <svg className="messenger-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
