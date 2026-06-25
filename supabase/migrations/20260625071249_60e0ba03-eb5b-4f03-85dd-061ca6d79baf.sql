@@ -1,0 +1,1 @@
+CREATE POLICY "sessions delete teacher or admin" ON public.sessions FOR DELETE TO authenticated USING (auth.uid() = teacher_id OR auth.uid() = requested_by OR public.has_role(auth.uid(), 'admin'));

@@ -457,13 +457,35 @@ async function listMySessions() {
 }
 async function listActiveSessions() {
   const { data, error } = await supabase.from('sessions').select('*')
-    .order('date', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(500);
   if (error) throw new Error(error.message);
-  // Filter non-completed/cancelled on client to be safe.
   return (data || [])
     .filter((r) => !['completed','cancelled'].includes(String(r.status || '').toLowerCase()))
     .map(cloudToLocalSession);
+}
+async function deleteSession(id) {
+  const { error } = await supabase.from('sessions').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return { id, deleted: true };
+}
+async function rescheduleSession(id, body) {
+  const patch = {};
+  if (body.date) {
+    patch.date = body.time ? `${body.date}T${body.time}:00` : body.date;
+  }
+  if (body.durationMinutes) patch.duration_hours = Number((Number(body.durationMinutes) / 60).toFixed(2));
+  patch.status = 'Rescheduled';
+  // Merge into learning_summary so client display picks up the new date/time strings.
+  const { data: existing } = await supabase.from('sessions').select('learning_summary').eq('id', id).maybeSingle();
+  const nextSummary = { ...((existing && existing.learning_summary) || {}) };
+  if (body.date) nextSummary.date = body.date;
+  if (body.time) nextSummary.time = body.time;
+  if (body.durationMinutes) nextSummary.durationMinutes = Number(body.durationMinutes);
+  patch.learning_summary = nextSummary;
+  const { data, error } = await supabase.from('sessions').update(patch).eq('id', id).select('*').maybeSingle();
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
 async function createSession(body) {
   const uid = await requireUid();
@@ -671,7 +693,9 @@ async function apiRequest(path, options = {}) {
   if (path === '/sessions/my' && method === 'GET') return listMySessions();
   if (path === '/sessions/feed' && method === 'GET') return listActiveSessions();
   if ((r = m(/^\/sessions\/([^/]+)\/status$/)) && method === 'PATCH') return updateSessionStatus(r[1], body);
+  if ((r = m(/^\/sessions\/([^/]+)\/reschedule$/)) && method === 'PATCH') return rescheduleSession(r[1], body);
   if ((r = m(/^\/sessions\/([^/]+)\/meeting\/join$/)) && method === 'POST') return joinSessionSeat(r[1], body);
+  if ((r = m(/^\/sessions\/([^/]+)$/)) && method === 'DELETE') return deleteSession(r[1]);
   if ((r = m(/^\/sessions\/([^/]+)$/)) && method === 'GET') {
     const { data, error } = await supabase.from('sessions').select('*').eq('id', r[1]).maybeSingle();
     return camel(ok(data, error));
@@ -1363,6 +1387,8 @@ function getSessionRoom(session) {
 }
 
 function getParticipantRole(session, user) {
+  if (session.teacherId && user.id && session.teacherId === user.id) return 'mentor';
+  if (session.learnerId && user.id && session.learnerId === user.id) return 'learner';
   if (session.teacher === user.fullName) return 'mentor';
   if (session.learner === user.fullName) return 'learner';
   return '';
@@ -2775,6 +2801,8 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [showDialog, setShowDialog] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState(null);
+  const [rescheduleDraft, setRescheduleDraft] = useState({ date: '', time: '', durationMinutes: 30 });
   const [sessionSearch, setSessionSearch] = useState('');
   const [form, setForm] = useState({
     role: 'teaching',
@@ -2889,6 +2917,58 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     apiRequest(`/sessions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
       .catch((err) => setSessionNotice(`Status updated locally but cloud sync failed: ${err.message}.`));
   }
+
+  function cancelSession(session) {
+    setSessionNotice('');
+    if (!window.confirm('Cancel and delete this session? This cannot be undone.')) return;
+    setSessions((current) => current.filter((s) => s.id !== session.id));
+    apiRequest(`/sessions/${session.id}`, { method: 'DELETE' })
+      .then(() => setSessionNotice('Session cancelled and removed.'))
+      .catch((err) => setSessionNotice(`Removed locally but cloud delete failed: ${err.message}.`));
+  }
+
+  function openReschedule(session) {
+    setSessionNotice('');
+    setRescheduleTarget(session);
+    setRescheduleDraft({
+      date: session.date || '',
+      time: session.time || '',
+      durationMinutes: session.durationMinutes || Math.round((Number(session.duration || 0)) * 60) || 30,
+    });
+  }
+
+  function closeReschedule() {
+    setRescheduleTarget(null);
+  }
+
+  async function submitReschedule(event) {
+    event.preventDefault();
+    if (!rescheduleTarget) return;
+    const { date, time, durationMinutes } = rescheduleDraft;
+    if (!date || !time) {
+      setSessionNotice('Please choose a new date and time to reschedule.');
+      return;
+    }
+    const minutes = Math.max(1, Math.floor(Number(durationMinutes) || 30));
+    const id = rescheduleTarget.id;
+    setSessions((current) => current.map((s) => s.id === id ? {
+      ...s,
+      date,
+      time,
+      durationMinutes: minutes,
+      duration: Number((minutes / 60).toFixed(2)),
+      credits: minutesToCredits(minutes),
+      status: 'Rescheduled',
+    } : s));
+    setRescheduleTarget(null);
+    try {
+      await apiRequest(`/sessions/${id}/reschedule`, { method: 'PATCH', body: JSON.stringify({ date, time, durationMinutes: minutes }) });
+      setSessionNotice('Session rescheduled. Learners will see the updated time.');
+    } catch (err) {
+      setSessionNotice(`Rescheduled locally but cloud sync failed: ${err.message}.`);
+    }
+  }
+
 
   function updateSessionAttendance(sessionId, updater) {
     let updatedSession = null;
@@ -3115,8 +3195,8 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
                   );
                 })()}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Accepted')}>Accept</button>}
-                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Rescheduled')}>Reschedule</button>}
-                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Cancelled')} disabled={session.status === 'Cancelled' || session.status === 'Completed'}>Cancel</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => openReschedule(session)}>Reschedule</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => cancelSession(session)}>Cancel</button>}
                 {canTeach && role === 'mentor' && <button className="primary" onClick={() => completeSession(session)} disabled={session.status === 'Cancelled'}>Complete</button>}
               </div>
             </div>
@@ -3147,6 +3227,28 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
           </div>
         </div>
       )}
+
+      {rescheduleTarget && (
+        <div className="modal-backdrop">
+          <form className="modal card" onSubmit={submitReschedule}>
+            <div className="section-title">
+              <h2>Reschedule Session</h2>
+              <button className="icon" type="button" onClick={closeReschedule}>×</button>
+            </div>
+            <p className="muted-text">{rescheduleTarget.topic} • currently {rescheduleTarget.date || 'TBA'} {rescheduleTarget.time || ''}</p>
+            <div className="form-grid">
+              <div><label>New Date</label><input type="date" value={rescheduleDraft.date} onChange={(e) => setRescheduleDraft({ ...rescheduleDraft, date: e.target.value })} required /></div>
+              <div><label>New Time</label><input type="time" value={rescheduleDraft.time} onChange={(e) => setRescheduleDraft({ ...rescheduleDraft, time: e.target.value })} required /></div>
+              <div><label>Duration (minutes)</label><input type="number" min="1" step="1" value={rescheduleDraft.durationMinutes} onChange={(e) => setRescheduleDraft({ ...rescheduleDraft, durationMinutes: e.target.value })} required /></div>
+            </div>
+            <div className="actions">
+              <button className="ghost" type="button" onClick={closeReschedule}>Cancel</button>
+              <button className="primary" type="submit">Save New Time</button>
+            </div>
+          </form>
+        </div>
+      )}
+
 
       {activeMeeting && (
         <div className="modal-backdrop">
