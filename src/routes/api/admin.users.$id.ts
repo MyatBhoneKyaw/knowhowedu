@@ -4,14 +4,27 @@ export const Route = createFileRoute("/api/admin/users/$id")({
   server: {
     handlers: {
       DELETE: async ({ request, params }) => {
-        const { json, requireAdmin, adminClient } = await import(
-          "@/lib/knowhow-api.server"
-        );
-        await requireAdmin(request);
-        const admin = adminClient();
-        const { error } = await admin.auth.admin.deleteUser(params.id);
-        if (error) return json({ message: error.message }, 400);
-        return json({ ok: true });
+        const { json, requireAdmin } = await import("@/lib/knowhow-api.server");
+        try {
+          await requireAdmin(request);
+        } catch (e: any) {
+          if (e instanceof Response) return e;
+          return json({ message: e?.message || "Unauthorized" }, 401);
+        }
+        try {
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          // Best-effort cleanup of profile row first (auth.users CASCADE should handle the rest)
+          await supabaseAdmin.from("profiles").delete().eq("id", params.id);
+          const { error } = await supabaseAdmin.auth.admin.deleteUser(params.id);
+          if (error) {
+            console.error("[admin delete user] auth error", { id: params.id, error });
+            return json({ message: `Auth delete failed: ${error.message}` }, 400);
+          }
+          return json({ ok: true });
+        } catch (e: any) {
+          console.error("[admin delete user] threw", e);
+          return json({ message: e?.message || "Internal error deleting user" }, 500);
+        }
       },
       PATCH: async ({ request, params }) => {
         const { json, requireAdmin, adminClient } = await import(
