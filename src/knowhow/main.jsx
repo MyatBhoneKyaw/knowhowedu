@@ -4155,7 +4155,7 @@ function SettingsPage({ user, setUser, onLogout }) {
     { id: 'billing', label: 'Payment Info', icon: '💳' },
     { id: 'subscription', label: 'Subscription', icon: '⭐' },
     { id: 'appearance', label: 'Appearance', icon: '👁️' },
-    { id: 'integrations', label: 'Integrations', icon: '⚙️' },
+    
     { id: 'support', label: 'Help and Support', icon: '?' },
     { id: 'about', label: 'About', icon: 'i' },
   ];
@@ -4380,14 +4380,8 @@ function SettingsPage({ user, setUser, onLogout }) {
       );
     }
 
-    if (activeSection === 'integrations') {
-      return (
-        <div className="settings-panel-card">
-          <h2>Integrations</h2>
-          {['Google Meet sessions', 'Calendar reminders', 'Portfolio links', 'Certificate storage'].map((item) => <div className="settings-row" key={item}><span><strong>{item}</strong><small>Connected in demo mode when available.</small></span><button className="ghost" type="button" onClick={() => setSettingsNotice(`${item} integration opened.`)}>Manage</button></div>)}
-        </div>
-      );
-    }
+
+
 
     if (activeSection === 'support') {
       return (
