@@ -3315,6 +3315,22 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       };
     });
     setActiveMeeting(updated);
+    // Sync attendance to the cloud so the other participant's client sees this join in real time.
+    const isCloudSession = session.id && (session.fromCloud || session.cloudId || /^[0-9a-f-]{36}$/i.test(String(session.id)));
+    if (isCloudSession) {
+      (async () => {
+        try {
+          const { data, error } = await supabase.rpc('session_attendance_join', { _session_id: session.id, _user_name: user.fullName, _role: role });
+          if (error) throw error;
+          const merged = cloudToLocalSession(data);
+          if (!merged) return;
+          setSessions((curr) => curr.map((s) => (s.id === merged.id ? { ...s, ...merged } : s)));
+          setActiveMeeting((curr) => (curr && curr.id === merged.id ? { ...curr, ...merged } : curr));
+        } catch (err) {
+          setSessionNotice(`Joined locally but cloud attendance sync failed: ${err.message || err}`);
+        }
+      })();
+    }
   }
 
   async function leaveMeeting() {
