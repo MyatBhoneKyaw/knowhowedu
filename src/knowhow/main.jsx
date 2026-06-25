@@ -5478,25 +5478,8 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
           </div>
         </div>
 
-
-        <div className="card user-account-view">
-          <div className="section-title"><h3>User Account View</h3><StatusBadge status={selectedUser.status} /></div>
-          <div className="profile-head"><Avatar text={getInitials(selectedUser.fullName)} large /><div><h2>{selectedUser.fullName}</h2><p>@{selectedUser.username} • {selectedUser.email || 'No email'} • {selectedUser.role}</p></div></div>
-          <div className="pill-wrap left">{(selectedUser.languages || []).map((item) => <span className="pill muted" key={item}>{item}</span>)}{(selectedUser.interests || []).map((item) => <span className="pill" key={item}>{item}</span>)}</div>
-          <div className="stats-grid mini-stats">
-            <StatCard label="Credits" value={selectedUser.wallet.current} hint="Available" />
-            <StatCard label="Loan" value={selectedUser.loan.outstanding} hint={`Limit ${selectedUser.loan.limit} • ${selectedUser.loan.due}`} />
-            <StatCard label="Purchased" value={selectedUser.wallet.purchased} hint="Credit points" />
-            <StatCard label="Videos" value={selectedUser.wallet.lectureAccess} hint="Lecture access" />
-          </div>
-          <h3>Loan & Purchase Oversight</h3>
-          <div className="list">
-            <MiniPill title="Loan Policy" text={`Outstanding ${selectedUser.loan.outstanding}/${selectedUser.loan.limit} credits. Due: ${selectedUser.loan.due}`} />
-            <MiniPill title="Purchases" text={selectedUser.purchases.join(', ')} />
-            {selectedUser.transactions.length ? selectedUser.transactions.map((item) => <TransactionItem key={`${selectedUser.id}-${item.id}`} item={item} />) : <p className="muted-text">No credit transactions yet.</p>}
-          </div>
-        </div>
       </div>
+
 
       <div className="two-col">
         <div className="card">
