@@ -2780,6 +2780,12 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     notes: '',
   });
   const canTeach = canUserTeach(user);
+  // Re-render every 30s so the "Join Meeting" button enables when the start time arrives.
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setNowTick((n) => n + 1), 30000);
+    return () => window.clearInterval(t);
+  }, []);
   const activeSessions = sessions.filter((session) => session.status !== 'Completed');
   const normalizedSessionSearch = normalizeText(sessionSearch);
   const visibleSessions = activeSessions
