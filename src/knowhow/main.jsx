@@ -2853,7 +2853,16 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     };
     setSessions([session, ...sessions]);
     setShowDialog(false);
-    setSessionNotice(`Teaching session created. Learners can only join after they are assigned. Credits: ${formatCredits(creditAmount)} using the standard time table (${getCreditTableLabel(durationMinutes)}).`);
+    setSessionNotice(`Teaching session created. Learners can join from the sessions feed. Credits: ${formatCredits(creditAmount)} using the standard time table (${getCreditTableLabel(durationMinutes)}).`);
+    // Persist to cloud so other users can discover and join.
+    try {
+      const saved = await apiRequest('/sessions/request', { method: 'POST', body: JSON.stringify(session) });
+      if (saved && saved.id) {
+        setSessions((current) => current.map((s) => (s.id === session.id ? { ...session, ...saved } : s)));
+      }
+    } catch (err) {
+      setSessionNotice(`Session saved locally but cloud sync failed: ${err.message}. It will not appear for other users yet.`);
+    }
   }
 
   function updateStatus(id, status) {
@@ -2863,6 +2872,9 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       const withRoom = ['Accepted', 'Rescheduled'].includes(status) ? ensureStoredSessionRoom(session) : session;
       return { ...withRoom, status };
     }));
+    // Push to cloud so other participants see the change.
+    apiRequest(`/sessions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+      .catch((err) => setSessionNotice(`Status updated locally but cloud sync failed: ${err.message}.`));
   }
 
   function updateSessionAttendance(sessionId, updater) {
