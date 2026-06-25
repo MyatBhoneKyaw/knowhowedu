@@ -2300,7 +2300,11 @@ function AuthScreen({ onAuthSuccess }) {
 
         {error && <p className="error-text">{error}</p>}
         <button className="primary full auth-submit" type="submit" disabled={loading}>{loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Account'}</button>
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#64748b' }}>
+          <a href="/admin" style={{ color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>Admin Login →</a>
+        </div>
       </form>
+
     </div>
   );
 }
