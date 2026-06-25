@@ -4235,14 +4235,6 @@ function SettingsPage({ user, setUser, onLogout }) {
             <label className="mini-switch"><input type="checkbox" checked={draft.twoFactor} onChange={toggleTwoFactor} /><i /></label>
             <button className="ghost" type="button" onClick={() => { setDraftField('twoFactor', true); setSettingsNotice('2FA setup opened for demo mode.'); }}>Setup 2FA</button>
           </div>
-          <div className="login-activity-block">
-            <div className="settings-section-head small"><h3>Login Activity</h3><button className="ghost" type="button" onClick={() => setSettingsNotice('All other devices were logged out in demo mode.')}>Log Out All Devices</button></div>
-            {['Windows Chrome - Current device', 'iPhone 14 - Yangon, Myanmar', 'Android Browser - Mandalay, Myanmar'].map((item) => <div className="device-row" key={item}><span>▣</span><strong>{item}</strong><small>Location checked</small></div>)}
-          </div>
-          <div className="settings-check-grid">
-            <label><input type="checkbox" checked={draft.criticalAlerts} onChange={(event) => setDraftField('criticalAlerts', event.target.checked)} /> Critical alerts</label>
-            <label><input type="checkbox" checked={draft.loginAlerts} onChange={(event) => setDraftField('loginAlerts', event.target.checked)} /> New login attempts</label>
-          </div>
         </div>
       );
     }
