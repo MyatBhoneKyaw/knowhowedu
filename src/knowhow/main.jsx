@@ -2629,18 +2629,37 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
   const nextStreak = dailyState.lastClaim === yesterday ? Math.min((dailyState.streak || 0) + 1, 7) : 1;
   const rewardAmount = Number((1 + (nextStreak - 1) * (0.5 / 6)).toFixed(2));
 
-  function claimDailyReward() {
+  async function claimDailyReward() {
     setWalletNotice('');
     if (alreadyClaimed) {
       setWalletNotice('Daily reward already claimed today. Come back tomorrow!');
+      return;
+    }
+    const newCurrent = Number((wallet.current + rewardAmount).toFixed(2));
+    const newEarned = Number(((wallet.earned || 0) + rewardAmount).toFixed(2));
+    try {
+      const { error: wErr } = await supabase
+        .from('wallets')
+        .update({ current_credits: newCurrent, earned_credits: newEarned, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (wErr) throw wErr;
+      await supabase.from('credit_transactions').insert({
+        user_id: user.id,
+        amount: rewardAmount,
+        type: 'earned',
+        description: `Daily reward (Day ${nextStreak} streak)`,
+        balance_after: newCurrent,
+      });
+    } catch (err) {
+      setWalletNotice(`Could not save daily reward: ${err.message || err}`);
       return;
     }
     const nextUser = {
       ...user,
       wallet: normalizeWallet({
         ...wallet,
-        current: Number((wallet.current + rewardAmount).toFixed(2)),
-        earned: Number(((wallet.earned || 0) + rewardAmount).toFixed(2)),
+        current: newCurrent,
+        earned: newEarned,
       }),
     };
     const nextState = { lastClaim: today, streak: nextStreak };
