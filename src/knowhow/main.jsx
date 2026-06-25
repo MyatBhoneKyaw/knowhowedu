@@ -25,7 +25,7 @@ function roleLabel(role = 'learner') {
     admin: 'Administrator',
     user: 'Learner',
     learner: 'Learner',
-    assistant_teacher: 'Assistant Teacher',
+    assistant_teacher: 'Teacher',
     teacher: 'Teacher',
     community_mentor: 'Community Mentor',
     corporate_partner: 'Corporate Partner',
