@@ -2918,6 +2918,24 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     });
     setSessions(nextSessions);
     setSessionNotice('Seat joined successfully. This session is now pinned at the top.');
+    // Sync seat join to cloud so the teacher and other learners see the updated seat count.
+    if (session.fromCloud || session.cloudId) {
+      apiRequest(`/sessions/${session.id}/meeting/join`, { method: 'POST', body: JSON.stringify({ userName: user.fullName }) })
+        .catch((err) => setSessionNotice(`Seat joined locally but cloud sync failed: ${err.message}.`));
+    }
+  }
+
+  function sessionStartMs(session) {
+    if (!session.date) return null;
+    const iso = session.time ? `${session.date}T${session.time}:00` : `${session.date}T00:00:00`;
+    const ms = Date.parse(iso);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  function canJoinMeetingNow(session) {
+    const start = sessionStartMs(session);
+    if (start == null) return true; // unknown start → allow
+    // Allow joining from 10 minutes before start time.
+    return Date.now() >= start - 10 * 60 * 1000;
   }
 
   function joinMeeting(session) {
