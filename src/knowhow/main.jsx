@@ -3511,7 +3511,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
                 
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => openReschedule(session)}>Reschedule</button>}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => cancelSession(session)}>Cancel</button>}
-                {canTeach && role === 'mentor' && <button className="primary" onClick={() => completeSession(session)} disabled={session.status === 'Cancelled'}>Complete</button>}
+                
               </div>
             </div>
           );
