@@ -5320,7 +5320,7 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
         const localOnly = normalizedApplications.filter((item) => item.source !== 'backend' && !normalizedBackend.some((backendItem) => backendItem.id === item.id));
         setTeacherApplications([...normalizedBackend, ...localOnly]);
         if (normalizedBackend[0]) setSelectedApplicationId(normalizedBackend[0].id);
-        setAdminNotice('Teacher applications loaded from Lovable Cloud.');
+        setAdminNotice('');
       } catch (error) {
         setAdminNotice('Could not load applications from Lovable Cloud. Showing local demo data.');
       }
