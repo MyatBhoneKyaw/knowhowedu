@@ -4463,8 +4463,6 @@ function SettingsPage({ user, setUser, onLogout }) {
             <input type="checkbox" role="switch" checked={draft.theme === 'dark'} onChange={(event) => updateTheme(event.target.checked)} aria-label="Toggle dark mode" />
             <i aria-hidden="true"></i>
           </label>
-          <label className="settings-row"><span><strong>Compact mode</strong><small>Reduce spacing for dense dashboards.</small></span><input type="checkbox" checked={draft.compactMode} onChange={(event) => setDraftField('compactMode', event.target.checked)} /></label>
-          <label className="settings-row"><span><strong>Autoplay free videos</strong><small>Preview free lectures quickly from Video.</small></span><input type="checkbox" checked={draft.autoPlayFreeVideos} onChange={(event) => setDraftField('autoPlayFreeVideos', event.target.checked)} /></label>
         </div>
       );
     }
