@@ -250,6 +250,16 @@ async function cloudReviewApplication(id, body) {
     .select('*')
     .maybeSingle();
   if (error) throw new Error(error.message);
+  // On approval, promote the applicant's role on their profile so the app
+  // recognizes them as a teacher (raw_role stores the granular role string).
+  if (data && body.status === 'approved') {
+    const nextRole = data.requested_role === 'teacher' ? 'teacher' : (data.requested_role || 'assistant_teacher');
+    const { error: roleErr } = await supabase
+      .from('profiles')
+      .update({ raw_role: nextRole })
+      .eq('id', data.user_id);
+    if (roleErr) throw new Error(roleErr.message);
+  }
   const { data: profile } = await supabase.from('profiles').select('id, full_name, username, email').eq('id', data.user_id).maybeSingle();
   return applicationRowToApi(data, profile);
 }
