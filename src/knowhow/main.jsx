@@ -3683,7 +3683,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
             <svg className="messenger-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input className="compact-input messenger-search-input" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Search people or groups" />
           </div>
-          <div className="chat-filter-row"><button type="button" className={activeFilter === 'solo' ? 'active' : ''} onClick={() => setActiveFilter('solo')}>Solo</button><button type="button" className={activeFilter === 'group' ? 'active' : ''} onClick={() => setActiveFilter('group')}>Group</button></div>
+          <div className="chat-filter-row"><button type="button" className={activeFilter === 'solo' ? 'active' : ''} onClick={() => setActiveFilter('solo')}>People</button><button type="button" className={activeFilter === 'group' ? 'active' : ''} onClick={() => setActiveFilter('group')}>Group</button></div>
           <div className="contact-scroll modern-contact-scroll">
             {filteredContacts.length === 0 && <p className="muted-text empty-contacts">No conversations found.</p>}
             {filteredContacts.map((contact) => {
