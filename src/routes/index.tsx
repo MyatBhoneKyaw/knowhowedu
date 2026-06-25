@@ -24,6 +24,7 @@ export const Route = createFileRoute("/")({
 function KnowhowApp() {
   useEffect(() => {
     // The MVP frontend self-mounts to #root via createRoot in main.jsx.
+    // @ts-expect-error: untyped JSX MVP module
     import("@/knowhow/main.jsx");
   }, []);
   return <div id="root" />;
