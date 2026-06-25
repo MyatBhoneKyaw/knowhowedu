@@ -22,6 +22,7 @@ function getInitials(name = 'User') {
 
 function roleLabel(role = 'learner') {
   const labels = {
+    admin: 'Administrator',
     user: 'Learner',
     learner: 'Learner',
     assistant_teacher: 'Assistant Teacher',
@@ -84,7 +85,9 @@ function profileRowToApiUser(row, roleRow) {
   if (!row) return null;
   const profile = row.profile || {};
   const sysRole = roleRow?.role;
-  const rawRole = row.raw_role;
+  const teachingProfile = row.teaching_profile || {};
+  const hasApprovedTeaching = teachingProfile.applicationStatus === 'approved' || teachingProfile.licenseStatus === 'Approved';
+  const rawRole = hasApprovedTeaching && (!row.raw_role || row.raw_role === 'learner') ? 'teacher' : row.raw_role;
   // Admin from user_roles always wins. Otherwise prefer the granular raw_role
   // (e.g. teacher, assistant_teacher) over the basic 'user' enum value.
   let role;
@@ -101,7 +104,7 @@ function profileRowToApiUser(row, roleRow) {
     rawRole: rawRole || 'learner',
     profile,
     learningProfile: row.learning_profile || {},
-    teachingProfile: row.teaching_profile || {},
+    teachingProfile,
     subjectLevels: row.subject_levels || [],
     badges: row.badges || [],
     xp: row.xp || 0,
@@ -249,10 +252,11 @@ async function cloudListAdminApplications() {
 }
 
 async function cloudReviewApplication(id, body) {
+  const normalizedStatus = String(body.status || '').toLowerCase();
   const { data, error } = await supabase
     .from('teacher_applications')
     .update({
-      status: body.status,
+      status: normalizedStatus,
       admin_note: body.adminNote,
       reviewed_at: new Date().toISOString(),
     })
@@ -263,7 +267,7 @@ async function cloudReviewApplication(id, body) {
   // On approval, promote the applicant's role on their profile so the app
   // recognizes them as a teacher (raw_role stores the granular role string),
   // and reflect the approval in teaching_profile so UI gates flip immediately.
-  if (data && body.status === 'approved') {
+  if (data && normalizedStatus === 'approved') {
     const nextRole = data.requested_role === 'teacher' ? 'teacher' : (data.requested_role || 'assistant_teacher');
     const niceLabel = nextRole === 'teacher' ? 'Teacher' : nextRole === 'assistant_teacher' ? 'Assistant Teacher' : nextRole;
     const { data: existing } = await supabase.from('profiles').select('teaching_profile').eq('id', data.user_id).maybeSingle();
@@ -611,7 +615,7 @@ async function completeQuest(id, body) {
 
 // ----- Search / Users -----
 async function searchUsers(q) {
-  let query = supabase.from('profiles').select('id, full_name, username, email, profile, badges, xp, average_rating').limit(50);
+  let query = supabase.from('profiles').select('id, full_name, username, email, raw_role, profile, learning_profile, teaching_profile, subject_levels, badges, xp, average_rating, hours_shared').limit(50);
   if (q) query = query.or(`username.ilike.%${q}%,full_name.ilike.%${q}%`);
   const { data, error } = await query;
   return camel(ok(data, error));
@@ -1658,7 +1662,7 @@ function App() {
     [...PEOPLE, ...cloudPeople].forEach((p) => {
       const key = (p.username || p.id || '').toLowerCase();
       if (!key) return;
-      if (!map.has(key)) map.set(key, p);
+      if (p.isCloudUser || !map.has(key)) map.set(key, p);
     });
     // exclude current logged-in user from search list
     if (user?.username) map.delete(user.username.toLowerCase());
