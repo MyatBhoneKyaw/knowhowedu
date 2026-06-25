@@ -5,7 +5,6 @@ import { useEffect } from "react";
 // /teachers, /messages, etc.) is handled by the mounted MVP app instead of
 // TanStack's 404 boundary.
 export const Route = createFileRoute("/$")({
-  ssr: false,
   component: KnowhowApp,
 });
 
