@@ -2109,29 +2109,42 @@ function SearchPage({ user, people, posts, sessions, messages, setMessages, setP
     setProfileActionNotice(`Friend request sent to ${person.fullName}.`);
   }
 
-  function submitReport(person) {
+  async function submitReport(person) {
     if (!person || person.isCurrentUser) return;
     if (!String(reportDraft.details || '').trim()) {
       setProfileActionNotice('Please add report details before submitting.');
       return;
     }
-    const report = {
-      id: crypto.randomUUID(),
-      userId: person.id,
-      userName: person.fullName,
+    const payload = {
+      reportedUserId: person.isCloudUser ? person.id : null,
+      reportedUsername: person.username,
+      reportedFullName: person.fullName,
       reason: reportDraft.reason,
       details: reportDraft.details.trim(),
-      submittedAt: new Date().toISOString(),
-      status: 'Requested review',
     };
-    const existingReports = loadState('knowhow-profile-reports', []);
-    localStorage.setItem('knowhow-profile-reports', JSON.stringify([report, ...existingReports]));
+    try {
+      await apiRequest('/users/report', { method: 'POST', body: JSON.stringify(payload) });
+      setProfileActionNotice(`Report submitted for ${person.fullName}. The admin team will review it.`);
+    } catch (error) {
+      // Fall back to local cache so the user still gets feedback if offline / unauthenticated.
+      const report = {
+        id: crypto.randomUUID(),
+        userId: person.id,
+        userName: person.fullName,
+        reason: reportDraft.reason,
+        details: reportDraft.details.trim(),
+        submittedAt: new Date().toISOString(),
+        status: 'Requested review',
+      };
+      const existingReports = loadState('knowhow-profile-reports', []);
+      localStorage.setItem('knowhow-profile-reports', JSON.stringify([report, ...existingReports]));
+      setProfileActionNotice(`Report saved locally for ${person.fullName} (${error.message}).`);
+    }
     const nextReported = Array.from(new Set([...reportedUsers, person.id]));
     setReportedUsers(nextReported);
     localStorage.setItem('knowhow-reported-users', JSON.stringify(nextReported));
     setReportDraft({ reason: 'Spam or scam', details: '' });
     setShowReportForm(false);
-    setProfileActionNotice(`Report info submitted for ${person.fullName}.`);
   }
 
   const selectedPerson = selected?.person;
