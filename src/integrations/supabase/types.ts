@@ -190,6 +190,68 @@ export type Database = {
         }
         Relationships: []
       }
+      lecture_videos: {
+        Row: {
+          badge: string
+          category: string
+          created_at: string
+          description: string | null
+          duration_label: string
+          external_url: string | null
+          id: string
+          level: string
+          owner_id: string
+          poster_url: string | null
+          price_credits: number
+          storage_path: string | null
+          teacher_name: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          badge?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          duration_label?: string
+          external_url?: string | null
+          id?: string
+          level?: string
+          owner_id: string
+          poster_url?: string | null
+          price_credits?: number
+          storage_path?: string | null
+          teacher_name: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          badge?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          duration_label?: string
+          external_url?: string | null
+          id?: string
+          level?: string
+          owner_id?: string
+          poster_url?: string | null
+          price_credits?: number
+          storage_path?: string | null
+          teacher_name?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lecture_videos_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loans: {
         Row: {
           amount: number
@@ -981,6 +1043,38 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      video_ownerships: {
+        Row: {
+          created_at: string
+          id: string
+          source: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          source?: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          source?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_ownerships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       wallets: {
         Row: {
