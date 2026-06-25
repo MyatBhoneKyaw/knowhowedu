@@ -2175,10 +2175,46 @@ function AuthScreen({ onAuthSuccess }) {
           disabled={loading}
           onClick={async () => {
             setError('');
+            const logOAuth = (phase, detail) => {
+              const payload = { phase, detail, href: window.location.href, ts: new Date().toISOString() };
+              console.info('[google-oauth]', payload);
+              try {
+                fetch('/api/public/auth-log', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify(payload),
+                  keepalive: true,
+                }).catch((err) => console.warn('[google-oauth] log post failed', err));
+              } catch (err) {
+                console.warn('[google-oauth] log post threw', err);
+              }
+            };
+            logOAuth('click', { redirect_uri: window.location.origin });
             try {
               const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin });
+              logOAuth('signInWithOAuth:result', {
+                redirected: !!result?.redirected,
+                hasTokens: !!result?.tokens,
+                hasError: !!result?.error,
+                errorMessage: result?.error?.message,
+                errorName: result?.error?.name,
+              });
+              if (result?.tokens) {
+                try {
+                  const { data: userData, error: userErr } = await supabase.auth.getUser();
+                  logOAuth('profile:getUser', {
+                    userId: userData?.user?.id,
+                    email: userData?.user?.email,
+                    provider: userData?.user?.app_metadata?.provider,
+                    errorMessage: userErr?.message,
+                  });
+                } catch (err) {
+                  logOAuth('profile:getUser:throw', { message: err?.message, name: err?.name });
+                }
+              }
               if (result?.error) setError(result.error.message || 'Google sign-in failed');
             } catch (err) {
+              logOAuth('signInWithOAuth:throw', { message: err?.message, name: err?.name, stack: err?.stack });
               setError(err?.message || 'Google sign-in failed');
             }
           }}

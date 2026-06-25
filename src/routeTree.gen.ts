@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiQualificationsTeacherApplicationsRouteImport } from './routes/api/qualifications.teacher-applications'
+import { Route as ApiPublicAuthLogRouteImport } from './routes/api/public/auth-log'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth.register'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth.me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth.login'
@@ -37,6 +38,11 @@ const ApiQualificationsTeacherApplicationsRoute =
     path: '/api/qualifications/teacher-applications',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicAuthLogRoute = ApiPublicAuthLogRouteImport.update({
+  id: '/api/public/auth-log',
+  path: '/api/public/auth-log',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
   id: '/api/auth/register',
   path: '/api/auth/register',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/public/auth-log': typeof ApiPublicAuthLogRoute
   '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
   '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
   '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/public/auth-log': typeof ApiPublicAuthLogRoute
   '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
   '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
   '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/public/auth-log': typeof ApiPublicAuthLogRoute
   '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
   '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
   '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/public/auth-log'
     | '/api/qualifications/teacher-applications'
     | '/api/admin/auth/login'
     | '/api/admin/teacher-applications/$id'
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/public/auth-log'
     | '/api/qualifications/teacher-applications'
     | '/api/admin/auth/login'
     | '/api/admin/teacher-applications/$id'
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/public/auth-log'
     | '/api/qualifications/teacher-applications'
     | '/api/admin/auth/login'
     | '/api/admin/teacher-applications/$id'
@@ -169,6 +181,7 @@ export interface RootRouteChildren {
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
+  ApiPublicAuthLogRoute: typeof ApiPublicAuthLogRoute
   ApiQualificationsTeacherApplicationsRoute: typeof ApiQualificationsTeacherApplicationsRoute
   ApiAdminAuthLoginRoute: typeof ApiAdminAuthLoginRoute
   ApiAdminUsersIdRoute: typeof ApiAdminUsersIdRoute
@@ -196,6 +209,13 @@ declare module '@tanstack/react-router' {
       path: '/api/qualifications/teacher-applications'
       fullPath: '/api/qualifications/teacher-applications'
       preLoaderRoute: typeof ApiQualificationsTeacherApplicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/auth-log': {
+      id: '/api/public/auth-log'
+      path: '/api/public/auth-log'
+      fullPath: '/api/public/auth-log'
+      preLoaderRoute: typeof ApiPublicAuthLogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/register': {
@@ -279,6 +299,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
+  ApiPublicAuthLogRoute: ApiPublicAuthLogRoute,
   ApiQualificationsTeacherApplicationsRoute:
     ApiQualificationsTeacherApplicationsRoute,
   ApiAdminAuthLoginRoute: ApiAdminAuthLoginRoute,
