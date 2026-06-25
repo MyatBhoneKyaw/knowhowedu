@@ -5139,7 +5139,7 @@ function CommunityPage({ user, posts = [], setPosts = () => {} }) {
     localStorage.setItem(reactionStorageKey, JSON.stringify(nextMap));
   }
 
-  function createPost(event) {
+  async function createPost(event) {
     event.preventDefault();
     setCommunityNotice('');
     if (!postForm.title.trim() || !postForm.body.trim()) {
@@ -5148,24 +5148,36 @@ function CommunityPage({ user, posts = [], setPosts = () => {} }) {
     }
     const selectedBoard = boards.find((board) => board.title === postForm.community || board.category === postForm.community || board.name === normalizeText(postForm.community));
     const communityName = postForm.community || selectedBoard?.title || 'General';
-    const newPost = {
-      id: crypto.randomUUID(),
+    const draft = {
       community: communityName,
       title: postForm.title.trim(),
       body: postForm.body.trim(),
-      author: currentAuthor,
-      votes: 0,
-      likes: 0,
-      dislikes: 0,
-      comments: [],
-      tags: [communityName, selectedBoard?.category || communityName].filter(Boolean),
-      createdAt: new Date().toISOString(),
     };
-    setPosts([newPost, ...posts]);
-    setPostForm({ community: communityName, title: '', body: '' });
-    setActiveBoard('all');
-    setShowCreatePost(false);
+    try {
+      const saved = await apiRequest('/community', { method: 'POST', body: draft });
+      const newPost = {
+        id: saved?.id || crypto.randomUUID(),
+        community: saved?.community || communityName,
+        title: saved?.title || draft.title,
+        body: saved?.body || draft.body,
+        author: currentAuthor,
+        authorId: user?.id,
+        votes: 0,
+        likes: 0,
+        dislikes: 0,
+        comments: [],
+        tags: [communityName, selectedBoard?.category || communityName].filter(Boolean),
+        createdAt: saved?.createdAt || new Date().toISOString(),
+      };
+      setPosts([newPost, ...posts]);
+      setPostForm({ community: communityName, title: '', body: '' });
+      setActiveBoard('all');
+      setShowCreatePost(false);
+    } catch (err) {
+      setCommunityNotice(err?.message || 'Failed to publish post. Please sign in and try again.');
+    }
   }
+
 
   function votePost(postId, delta) {
     const current = Number(reactionMap[postId] || 0);
