@@ -1387,6 +1387,8 @@ function getSessionRoom(session) {
 }
 
 function getParticipantRole(session, user) {
+  if (session.teacherId && user.id && session.teacherId === user.id) return 'mentor';
+  if (session.learnerId && user.id && session.learnerId === user.id) return 'learner';
   if (session.teacher === user.fullName) return 'mentor';
   if (session.learner === user.fullName) return 'learner';
   return '';
