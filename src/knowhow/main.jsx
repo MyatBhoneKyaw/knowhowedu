@@ -1166,6 +1166,61 @@ const INITIAL_MESSAGES = [
     unread: false,
     reaction: '',
   },
+  {
+    id: 'm004',
+    name: 'Nway Oo',
+    username: 'nwayoo',
+    type: 'Private',
+    body: 'Thanks for the UI feedback yesterday! Can we book another slot next week?',
+    time: 'Today 08:12',
+    direction: 'incoming',
+    unread: true,
+    reaction: '',
+  },
+  {
+    id: 'm005',
+    name: 'Phyo Wai',
+    username: 'phyowai',
+    type: 'Private',
+    body: 'Sent you the Figma link. Let me know when you are free to review.',
+    time: 'Yesterday 14:42',
+    direction: 'incoming',
+    unread: false,
+    reaction: '🙏',
+  },
+  {
+    id: 'm006',
+    name: 'Japanese N5 Study Group',
+    username: 'n5-group',
+    type: 'Group Chat',
+    body: 'Kira: Reminder — flashcard challenge starts tonight at 8 PM!',
+    time: 'Today 07:55',
+    direction: 'incoming',
+    unread: true,
+    reaction: '',
+  },
+  {
+    id: 'm007',
+    name: 'React Builders Circle',
+    username: 'react-circle',
+    type: 'Group Chat',
+    body: 'Htet: Anyone tried TanStack Start with Supabase? Sharing notes after the session.',
+    time: 'Yesterday 22:10',
+    direction: 'incoming',
+    unread: false,
+    reaction: '🔥',
+  },
+  {
+    id: 'm008',
+    name: 'IELTS Speaking Squad',
+    username: 'ielts-squad',
+    type: 'Group Chat',
+    body: 'May: Cue card practice this Sunday 10 AM. React if joining.',
+    time: '2 days ago',
+    direction: 'incoming',
+    unread: false,
+    reaction: '✅',
+  },
 ];
 
 const CHALLENGES = [
@@ -3683,7 +3738,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
             <svg className="messenger-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input className="compact-input messenger-search-input" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Search people or groups" />
           </div>
-          <div className="chat-filter-row"><button type="button" className={activeFilter === 'solo' ? 'active' : ''} onClick={() => setActiveFilter('solo')}>Solo</button><button type="button" className={activeFilter === 'group' ? 'active' : ''} onClick={() => setActiveFilter('group')}>Group</button></div>
+          <div className="chat-filter-row"><button type="button" className={activeFilter === 'solo' ? 'active' : ''} onClick={() => setActiveFilter('solo')}>People</button><button type="button" className={activeFilter === 'group' ? 'active' : ''} onClick={() => setActiveFilter('group')}>Group</button></div>
           <div className="contact-scroll modern-contact-scroll">
             {filteredContacts.length === 0 && <p className="muted-text empty-contacts">No conversations found.</p>}
             {filteredContacts.map((contact) => {
