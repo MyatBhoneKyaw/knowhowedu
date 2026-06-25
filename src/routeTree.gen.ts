@@ -9,7 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SplatRouteImport } from './routes/$'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiQualificationsTeacherApplicationsRouteImport } from './routes/api/qualifications.teacher-applications'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth.register'
@@ -20,9 +20,9 @@ import { Route as ApiUsersMeProfileRouteImport } from './routes/api/users.me.pro
 import { Route as ApiAdminTeacherApplicationsIdRouteImport } from './routes/api/admin.teacher-applications.$id'
 import { Route as ApiAdminAuthLoginRouteImport } from './routes/api/admin.auth.login'
 
-const SplatRoute = SplatRouteImport.update({
-  id: '/$',
-  path: '/$',
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -76,7 +76,7 @@ const ApiAdminAuthLoginRoute = ApiAdminAuthLoginRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/$': typeof SplatRoute
+  '/admin': typeof AdminRoute
   '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -88,7 +88,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/$': typeof SplatRoute
+  '/admin': typeof AdminRoute
   '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -101,7 +101,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/$': typeof SplatRoute
+  '/admin': typeof AdminRoute
   '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -115,7 +115,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/$'
+    | '/admin'
     | '/api/admin/teacher-applications'
     | '/api/auth/login'
     | '/api/auth/me'
@@ -127,7 +127,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/$'
+    | '/admin'
     | '/api/admin/teacher-applications'
     | '/api/auth/login'
     | '/api/auth/me'
@@ -139,7 +139,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/$'
+    | '/admin'
     | '/api/admin/teacher-applications'
     | '/api/auth/login'
     | '/api/auth/me'
@@ -152,7 +152,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  SplatRoute: typeof SplatRoute
+  AdminRoute: typeof AdminRoute
   ApiAdminTeacherApplicationsRoute: typeof ApiAdminTeacherApplicationsRouteWithChildren
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
@@ -164,11 +164,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/$': {
-      id: '/$'
-      path: '/$'
-      fullPath: '/$'
-      preLoaderRoute: typeof SplatRouteImport
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -253,7 +253,7 @@ const ApiAdminTeacherApplicationsRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  SplatRoute: SplatRoute,
+  AdminRoute: AdminRoute,
   ApiAdminTeacherApplicationsRoute:
     ApiAdminTeacherApplicationsRouteWithChildren,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
