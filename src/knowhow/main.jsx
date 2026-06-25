@@ -1171,6 +1171,7 @@ function App() {
   function handleLogout() {
     localStorage.removeItem('knowhow-token');
     localStorage.removeItem('knowhow-user');
+    supabase.auth.signOut().catch(() => {});
     setLoggedIn(false);
   }
 
@@ -3843,11 +3844,12 @@ function VideoPanelPage({ user, setUser }) {
 function AdminShell({ adminAuthed, setAdminAuthed, setAdminMode, sessions, people, transactions, userTheme, teacherApplications, setTeacherApplications, setUser }) {
   function logoutAdmin() {
     localStorage.removeItem('knowhow-admin-token');
+    supabase.auth.signOut().catch(() => {});
     setAdminAuthed(false);
     setAdminMode(false);
     window.history.pushState({}, '', '/');
   }
-  function loginAdmin(token = 'demo-admin') {
+  function loginAdmin(token = 'cloud-admin') {
     localStorage.setItem('knowhow-admin-token', token);
     setAdminAuthed(true);
   }
@@ -3874,46 +3876,21 @@ function AdminLoginPage({ onSuccess }) {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/admin/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.token) {
-        onSuccess(data.token);
-        return;
-      }
-      if (form.email.toLowerCase() === 'admin@knowhow.test' && form.password === 'password123') {
-        onSuccess('demo-admin');
-        return;
-      }
-      const serverMsg = (data && data.message) || '';
-      if (response.status === 400) {
-        setError(serverMsg || 'Email and password are required.');
-      } else if (response.status === 401) {
-        if (/invalid login credentials/i.test(serverMsg)) {
-          setError('Incorrect email or password. Double-check your admin credentials and try again.');
-        } else if (/email not confirmed/i.test(serverMsg)) {
-          setError('This email has not been confirmed yet. Please confirm your email before signing in.');
-        } else {
-          setError(serverMsg || 'Incorrect email or password.');
-        }
-      } else if (response.status === 403) {
-        setError('This account exists but does not have admin access. Ask an existing admin to grant you the admin role.');
-      } else if (response.status === 429) {
+      const result = await cloudAdminLogin(form.email.trim(), form.password);
+      onSuccess(result.token);
+    } catch (err) {
+      const msg = err?.message || '';
+      if (err?.status === 403 || /admin access/i.test(msg)) {
+        setError(msg || 'This account exists but does not have admin access.');
+      } else if (/invalid login credentials/i.test(msg)) {
+        setError('Incorrect email or password. Double-check your admin credentials and try again.');
+      } else if (/email not confirmed/i.test(msg)) {
+        setError('This email has not been confirmed yet. Please confirm your email before signing in.');
+      } else if (/rate|too many/i.test(msg)) {
         setError('Too many sign-in attempts. Please wait a moment and try again.');
-      } else if (response.status >= 500) {
-        setError('The admin service is temporarily unavailable. Please try again in a moment.');
       } else {
-        setError(serverMsg || 'Unable to sign in. Please try again.');
+        setError(msg || 'Unable to sign in. Please try again.');
       }
-    } catch (error) {
-      if (form.email.toLowerCase() === 'admin@knowhow.test' && form.password === 'password123') {
-        onSuccess('demo-admin');
-        return;
-      }
-      setError('Cannot reach the admin service. Check your internet connection and try again.');
     } finally {
       setLoading(false);
     }
