@@ -1855,6 +1855,55 @@ function App() {
     return () => { cancelled = true; };
   }, [loggedIn]);
 
+  // Sync direct messages with the cloud so conversations appear for both sides.
+  useEffect(() => {
+    if (!loggedIn || !user?.id) return undefined;
+    let cancelled = false;
+    async function syncMessages() {
+      try {
+        const rows = await apiRequest('/messages/threads');
+        if (cancelled || !Array.isArray(rows)) return;
+        const peopleById = new Map(cloudPeople.map((p) => [p.id, p]));
+        const mapped = rows
+          .filter((r) => r && r.id && (r.senderId === user.id || r.recipientId === user.id))
+          .map((r) => {
+            const isOutgoing = r.senderId === user.id;
+            const otherId = isOutgoing ? r.recipientId : r.senderId;
+            const other = peopleById.get(otherId);
+            const otherName = other?.fullName || r.groupName || 'Member';
+            const otherUsername = other?.username || (otherName || '').toLowerCase().replace(/\s+/g, '');
+            const t = new Date(r.createdAt || Date.now());
+            const time = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return {
+              id: r.id,
+              name: otherName,
+              username: otherUsername,
+              type: r.messageType === 'community' ? 'Community message' : 'Private message',
+              body: r.body || '',
+              attachment: r.attachments || null,
+              time,
+              direction: isOutgoing ? 'outgoing' : 'incoming',
+              unread: !isOutgoing && !r.readAt,
+              delivered: true,
+              cloudId: r.id,
+              createdAt: r.createdAt,
+            };
+          });
+        setMessages((current) => {
+          const cloudIds = new Set(mapped.map((m) => m.id));
+          const localOnly = (current || []).filter((m) => !cloudIds.has(m.id) && !m.cloudId);
+          const merged = [...localOnly, ...mapped].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+          localStorage.setItem('knowhow-messages', JSON.stringify(merged));
+          return merged;
+        });
+      } catch (err) { /* ignore */ }
+    }
+    syncMessages();
+    const id = setInterval(syncMessages, 8000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [loggedIn, user?.id, cloudPeople]);
+
+
   // Load active sessions from the cloud so every signed-in user sees teacher-created sessions.
   useEffect(() => {
     if (!loggedIn) return undefined;
@@ -4030,8 +4079,9 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
   function sendMessage(customBody = '', attachment = null) {
     const body = (customBody || text || (attachment ? attachmentLabel(attachment) : '')).trim();
     if (!body && !attachment) return;
-    setMessages((current) => [...current, {
-      id: crypto.randomUUID(),
+    const tempId = crypto.randomUUID();
+    const optimistic = {
+      id: tempId,
       name: activeContact || 'Community Inbox',
       username: activeProfile?.username || normalizeText(activeContact).replace(/\s+/g, ''),
       type: composerMode === 'schedule' ? 'Schedule' : activeContact === 'Community Inbox' ? 'Community message' : 'Private message',
@@ -4041,10 +4091,28 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
       direction: 'outgoing',
       unread: false,
       delivered: true,
-    }]);
+    };
+    setMessages((current) => [...current, optimistic]);
     setText('');
     setComposerMode('message');
+    // Persist to cloud so the recipient sees it
+    const recipientId = activeProfile?.id;
+    if (recipientId && activeContact !== 'Community Inbox' && activeContact !== user.fullName) {
+      apiRequest('/messages', {
+        method: 'POST',
+        body: {
+          recipientId,
+          body: body || attachmentLabel(attachment),
+          messageType: composerMode === 'schedule' ? 'schedule' : 'private',
+          attachments: attachment || null,
+        },
+      }).then((saved) => {
+        if (!saved?.id) return;
+        setMessages((current) => current.map((m) => m.id === tempId ? { ...m, id: saved.id, cloudId: saved.id, createdAt: saved.createdAt || new Date().toISOString() } : m));
+      }).catch(() => { /* keep optimistic */ });
+    }
   }
+
 
   async function sendMediaFiles(event) {
     const files = Array.from(event.target.files || []);
