@@ -4899,16 +4899,10 @@ function SettingsPage({ user, setUser, onLogout }) {
               const next = event.target.value;
               setLanguage(next);
               try { window.localStorage.setItem('knowhow-language', next); } catch (_) {}
-              const code = next === 'Myanmar' ? 'my' : next === 'Chinese' ? 'zh-CN' : 'en';
-              const host = window.location.hostname;
-              const domains = ['', `; domain=${host}`, `; domain=.${host.split('.').slice(-2).join('.')}`];
-              const value = code === 'en' ? '' : `/en/${code}`;
-              domains.forEach((d) => {
-                document.cookie = `googtrans=${value}; path=/${d}`;
-              });
-              setSettingsNotice(`Language set to ${next}. Reloading...`);
-              setTimeout(() => window.location.reload(), 400);
+              setSettingsNotice(`Translating to ${next}...`);
+              import('../lib/translator').then((m) => m.setTranslationLanguage(next)).catch(() => {});
             }}
+
 
           >
             <option value="English">English</option>
