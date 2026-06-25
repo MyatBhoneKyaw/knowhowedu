@@ -1,0 +1,4034 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import './styles.css';
+import knowhowLogo from './knowhow-logo.png';
+
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+function getInitials(name = 'User') {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'U';
+}
+
+function roleLabel(role = 'learner') {
+  const labels = {
+    user: 'Learner',
+    learner: 'Learner',
+    assistant_teacher: 'Assistant Teacher',
+    teacher: 'Teacher',
+    community_mentor: 'Community Mentor',
+    corporate_partner: 'Corporate Partner',
+    administrator: 'Administrator',
+  };
+  return labels[role] || 'Learner';
+}
+
+function normalizeBackendUser(apiUser, wallet) {
+  if (!apiUser) return DEFAULT_USER;
+  return {
+    id: apiUser._id || apiUser.id,
+    fullName: apiUser.fullName || 'Know-how User',
+    username: apiUser.username || 'user',
+    email: apiUser.email || '',
+    avatar: getInitials(apiUser.fullName || apiUser.username),
+    bio: apiUser.profile?.bio || '',
+    region: apiUser.profile?.region || '',
+    age: apiUser.profile?.age || '',
+    languages: apiUser.profile?.languages?.length ? apiUser.profile.languages : ['English'],
+    interests: apiUser.profile?.interests?.length ? apiUser.profile.interests : ['English Speaking', 'UI/UX Design'],
+    education: apiUser.profile?.education?.map((item) => [item.degree, item.school, item.year].filter(Boolean).join(' - ')).join(', ') || '',
+    work: apiUser.profile?.workExperience?.map((item) => [item.role, item.company, item.years].filter(Boolean).join(' - ')).join(', ') || '',
+    portfolio: apiUser.profile?.portfolioLinks?.[0] || '',
+    social: apiUser.profile?.socialLinks?.[0] || '',
+    role: roleLabel(apiUser.role),
+    rawRole: apiUser.role || 'learner',
+    learnerLevel: apiUser.learningProfile?.level || 'N5 / Beginner',
+    teacherLevel: apiUser.teachingProfile?.level || 'Not eligible yet',
+    licenseStatus: apiUser.teachingProfile?.licenseStatus || 'Not submitted',
+    teacherPath: apiUser.teachingProfile?.applicationStatus || 'learner_first',
+    subjectLevels: apiUser.subjectLevels?.length ? apiUser.subjectLevels : [{ subject: 'Japanese', learnerLevel: 'N5', teacherLevel: 'N1 required' }],
+    theme: apiUser.profile?.theme || 'light',
+    privacy: apiUser.profile?.privacy?.showRegion === false ? 'Private' : 'Community visible',
+    notifications: apiUser.profile?.notifications?.sessionReminders ?? true,
+    twoFactor: apiUser.twoFactorEnabled || false,
+    xp: apiUser.xp || 0,
+    streak: apiUser.dailyStreak || 0,
+    wallet: normalizeWallet({
+      current: wallet?.currentCredits ?? 3,
+      earned: wallet?.earnedCredits ?? 0,
+      spent: wallet?.spentCredits ?? 0,
+      loanOutstanding: wallet?.loanOutstanding ?? 0,
+      loanDueDate: wallet?.loanDueDate ? String(wallet.loanDueDate).slice(0, 10) : '',
+      purchased: wallet?.purchasedCredits ?? 0,
+      lectureAccess: wallet?.lectureAccess ?? 0,
+    }),
+    skillsOffered: [],
+    skillsWanted: [],
+    badges: apiUser.badges || [],
+  };
+}
+
+async function apiRequest(path, options = {}) {
+  const token = localStorage.getItem('knowhow-token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+
+  if (!response.ok) {
+    throw new Error(data.message || `Request failed with status ${response.status}`);
+  }
+
+  return data;
+}
+
+
+async function adminApiRequest(path, options = {}) {
+  const token = localStorage.getItem('knowhow-admin-token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(data.message || `Admin request failed with status ${response.status}`);
+  }
+  return data;
+}
+
+function statusToApi(status) {
+  const value = String(status || '').toLowerCase();
+  if (value.includes('approve')) return 'approved';
+  if (value.includes('reject')) return 'rejected';
+  if (value.includes('info')) return 'needs_more_info';
+  return 'pending';
+}
+
+function statusToLabel(status) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'approved') return 'Approved';
+  if (value === 'rejected') return 'Rejected';
+  if (value === 'needs_more_info') return 'Needs More Info';
+  if (value === 'pending') return 'Pending';
+  return status || 'Pending';
+}
+
+function normalizeTeacherApplicationFromApi(item) {
+  return {
+    id: item._id || item.id,
+    source: 'backend',
+    userId: item.user?._id || item.user,
+    userName: item.user?.fullName || item.userName || 'Applicant',
+    username: item.user?.username || item.username || 'applicant',
+    email: item.user?.email || item.email || '',
+    subject: item.subject,
+    requestedRole: item.requestedRole,
+    learnerLevel: item.learnerLevel,
+    teacherLevelClaim: item.teacherLevelClaim,
+    linkedInUrl: item.linkedInUrl,
+    cvUrl: item.cvUrl,
+    licenseUrl: item.licenseUrl,
+    authorityName: item.authorityName,
+    note: item.note,
+    status: statusToLabel(item.status),
+    submittedAt: item.createdAt || item.submittedAt,
+    adminNote: item.adminNote,
+    reviewedAt: item.reviewedAt,
+    reviewTrail: item.reviewedAt ? [{ at: item.reviewedAt, action: statusToLabel(item.status), by: 'Admin', note: item.adminNote }] : [],
+  };
+}
+const CATEGORIES = [
+  'All',
+  'Design',
+  'Development',
+  'Language',
+  'Business',
+  'Marketing',
+  'Academic',
+  'Creative',
+];
+
+const LEVELS = ['All', 'Beginner', 'Intermediate', 'Advanced', 'Expert'];
+
+const LANGUAGE_OPTIONS = [
+  'Myanmar', 'English', 'Japanese', 'Korean', 'Chinese', 'Thai', 'Hindi', 'Spanish', 'French', 'German', 'Other'
+];
+
+const REGION_OPTIONS = [
+  'Yangon, Myanmar', 'Mandalay, Myanmar', 'Naypyidaw, Myanmar', 'Bago, Myanmar', 'Taunggyi, Myanmar', 'Mawlamyine, Myanmar', 'Pathein, Myanmar', 'Sittwe, Myanmar', 'Myitkyina, Myanmar', 'Remote / Online', 'Other'
+];
+
+const XP_LEVELS = [
+  { name: 'Beginner', min: 0, next: 100 },
+  { name: 'Explorer', min: 100, next: 250 },
+  { name: 'Learner', min: 250, next: 500 },
+  { name: 'Contributor', min: 500, next: 900 },
+  { name: 'Mentor', min: 900, next: 1400 },
+  { name: 'Expert', min: 1400, next: 2200 },
+  { name: 'Master', min: 2200, next: 3200 },
+];
+
+const DEFAULT_USER = {
+  id: 'u001',
+  fullName: 'Aung Min Thu',
+  username: 'aungmin',
+  email: 'aung@example.com',
+  avatar: 'AM',
+  bio: 'Frontend learner and part-time mentor interested in UI/UX, English speaking, and web development.',
+  region: 'Yangon, Myanmar',
+  age: 22,
+  languages: ['Myanmar', 'English'],
+  interests: ['UI/UX Design', 'English Speaking', 'Web Development'],
+  education: 'BSc Computing Student',
+  work: 'Freelance Web Designer',
+  portfolio: 'https://portfolio.example.com',
+  social: 'https://linkedin.com/in/aungmin',
+  role: 'Learner',
+  rawRole: 'learner',
+  learnerLevel: 'Japanese N5 / Beginner',
+  teacherLevel: 'Not eligible yet',
+  licenseStatus: 'Not submitted',
+  teacherPath: 'Learner first → Assistant Teacher → Teacher',
+  subjectLevels: [
+    { subject: 'Japanese', learnerLevel: 'N5', teacherLevel: 'N1 required' },
+    { subject: 'English Speaking', learnerLevel: 'Intermediate', teacherLevel: 'Advanced required' },
+  ],
+  theme: 'light',
+  privacy: 'Community visible',
+  notifications: true,
+  twoFactor: false,
+  xp: 160,
+  streak: 5,
+  wallet: {
+    current: 6.5,
+    earned: 13.5,
+    spent: 7,
+    loanOutstanding: 0,
+    loanDueDate: '',
+    purchased: 0,
+    lectureAccess: 0,
+  },
+  skillsOffered: [
+    {
+      id: 's001',
+      name: 'UI/UX Design',
+      category: 'Design',
+      description: 'Wireframes, design thinking, simple portfolio reviews.',
+      level: 'Intermediate',
+      availability: 'Weekends',
+      duration: 1.5,
+    },
+    {
+      id: 's002',
+      name: 'Web Development',
+      category: 'Development',
+      description: 'HTML, CSS, React basics and responsive layouts.',
+      level: 'Intermediate',
+      availability: 'Evenings',
+      duration: 2,
+    },
+  ],
+  skillsWanted: [
+    {
+      id: 'w001',
+      name: 'English Speaking',
+      category: 'Language',
+      goal: 'Improve presentation confidence.',
+      target: 'Advanced',
+    },
+    {
+      id: 'w002',
+      name: 'Digital Marketing',
+      category: 'Marketing',
+      goal: 'Learn social media campaign planning.',
+      target: 'Intermediate',
+    },
+  ],
+  badges: ['First Exchange', 'First Skill Shared', 'Community Helper'],
+};
+
+const PEOPLE = [
+  {
+    id: 'u002',
+    fullName: 'May Thet Hnin',
+    username: 'maythet',
+    avatar: 'MT',
+    bio: 'English speaking coach helping students with confidence and interview practice.',
+    region: 'Mandalay, Myanmar',
+    languages: ['Myanmar', 'English'],
+    interests: ['English Speaking', 'Public Speaking', 'Interview Practice'],
+    reputation: 94,
+    rating: 4.9,
+    completion: 98,
+    hoursShared: 86,
+    studentLimit: 8,
+    offered: [
+      { name: 'English Speaking', category: 'Language', level: 'Expert', certificate: 'TESOL demo certificate', creditRatePerMinute: 0.0167, duration: 1 },
+      { name: 'Public Speaking', category: 'Business', level: 'Advanced', certificate: 'Public Speaking Coach Level 2', creditRatePerMinute: 0.0167, duration: 1.5 },
+    ],
+    wanted: [
+      { name: 'UI/UX Design', category: 'Design', target: 'Intermediate' },
+      { name: 'Video Editing', category: 'Creative', target: 'Beginner' },
+    ],
+  },
+  {
+    id: 'u003',
+    fullName: 'Ko Hein Htet',
+    username: 'heinhtetdev',
+    avatar: 'HH',
+    bio: 'Full-stack developer sharing Laravel, React, and database design sessions.',
+    region: 'Yangon, Myanmar',
+    languages: ['Myanmar', 'English'],
+    interests: ['Web Development', 'Database Design', 'React'],
+    reputation: 88,
+    rating: 4.7,
+    completion: 92,
+    hoursShared: 64,
+    studentLimit: 6,
+    offered: [
+      { name: 'Web Development', category: 'Development', level: 'Advanced', certificate: 'Full-stack project portfolio verified', creditRatePerMinute: 0.0167, duration: 2 },
+      { name: 'Database Design', category: 'Development', level: 'Intermediate', certificate: 'Database fundamentals certificate', creditRatePerMinute: 0.0167, duration: 1.5 },
+    ],
+    wanted: [
+      { name: 'Digital Marketing', category: 'Marketing', target: 'Intermediate' },
+      { name: 'Graphic Design', category: 'Design', target: 'Beginner' },
+    ],
+  },
+  {
+    id: 'u004',
+    fullName: 'Su Myat Noe',
+    username: 'sumyatcreative',
+    avatar: 'SN',
+    bio: 'Graphic designer and video editor who wants to learn web development.',
+    region: 'Naypyidaw, Myanmar',
+    languages: ['Myanmar'],
+    interests: ['Graphic Design', 'Video Editing', 'Creative'],
+    reputation: 82,
+    rating: 4.6,
+    completion: 89,
+    hoursShared: 43,
+    studentLimit: 5,
+    offered: [
+      { name: 'Graphic Design', category: 'Design', level: 'Advanced', certificate: 'Adobe portfolio verified', creditRatePerMinute: 0.0167, duration: 1.5 },
+      { name: 'Video Editing', category: 'Creative', level: 'Intermediate', certificate: 'Editing project portfolio', creditRatePerMinute: 0.0167, duration: 2 },
+    ],
+    wanted: [
+      { name: 'Web Development', category: 'Development', target: 'Beginner' },
+      { name: 'English Speaking', category: 'Language', target: 'Intermediate' },
+    ],
+  },
+  {
+    id: 'u005',
+    fullName: 'David Chan',
+    username: 'davidbiz',
+    avatar: 'DC',
+    bio: 'Digital marketer teaching content strategy, SEO basics, and startup growth.',
+    region: 'Yangon, Myanmar',
+    languages: ['English', 'Myanmar'],
+    interests: ['Digital Marketing', 'Startup Planning', 'Business'],
+    reputation: 91,
+    rating: 4.8,
+    completion: 96,
+    hoursShared: 72,
+    studentLimit: 6,
+    offered: [
+      { name: 'Digital Marketing', category: 'Marketing', level: 'Advanced', certificate: 'Google Ads / SEO portfolio verified', creditRatePerMinute: 0.0167, duration: 1.5 },
+      { name: 'Startup Planning', category: 'Business', level: 'Intermediate', certificate: 'Startup mentor portfolio', creditRatePerMinute: 0.0167, duration: 1 },
+    ],
+    wanted: [
+      { name: 'UI/UX Design', category: 'Design', target: 'Intermediate' },
+      { name: 'Mathematics', category: 'Academic', target: 'Beginner' },
+    ],
+  },
+];
+
+const INITIAL_SESSIONS = [
+  {
+    id: 'ss001',
+    topic: 'English Speaking Practice',
+    teacher: 'May Thet Hnin',
+    learner: 'Aung Min Thu',
+    date: '2026-06-25',
+    time: '19:00',
+    duration: 1,
+    credits: 1,
+    creditRatePerMinute: 0.0167,
+    studentLimit: 8,
+    seatsAvailable: 7,
+    status: 'Accepted',
+    roomId: '2f3f3a5a-cf10-4421-a9c4-e36f6a0a1111',
+    meetingLink: '/meeting/2f3f3a5a-cf10-4421-a9c4-e36f6a0a1111',
+    meetingProvider: 'Know-how Room',
+    attendance: [],
+    actualDurationMinutes: 0,
+    verifiedDurationMinutes: 0,
+    mentorJoinedAt: '',
+    mentorLeftAt: '',
+    learnerJoinedAt: '',
+    learnerLeftAt: '',
+    notes: 'Practice interview introduction and confidence.',
+  },
+  {
+    id: 'ss002',
+    topic: 'UI Portfolio Review',
+    teacher: 'Aung Min Thu',
+    learner: 'David Chan',
+    date: '2026-06-28',
+    time: '15:00',
+    duration: 1.5,
+    credits: 1.5,
+    creditRatePerMinute: 0.0167,
+    studentLimit: 6,
+    seatsAvailable: 5,
+    status: 'Pending',
+    roomId: '7d886553-414d-4cb5-98d5-06b2cbf62222',
+    meetingLink: '/meeting/7d886553-414d-4cb5-98d5-06b2cbf62222',
+    meetingProvider: 'Know-how Room',
+    attendance: [],
+    actualDurationMinutes: 0,
+    verifiedDurationMinutes: 0,
+    mentorJoinedAt: '',
+    mentorLeftAt: '',
+    learnerJoinedAt: '',
+    learnerLeftAt: '',
+    notes: 'Review landing page layout and visual hierarchy.',
+  },
+];
+
+const INITIAL_TRANSACTIONS = [
+  { id: 't001', type: 'Earned', title: 'Teaching UI Design', amount: 2, date: '2026-06-12' },
+  { id: 't002', type: 'Spent', title: 'Learning English', amount: -1, date: '2026-06-14' },
+  { id: 't003', type: 'Earned', title: 'Portfolio Review', amount: 1.5, date: '2026-06-18' },
+  { id: 't004', type: 'Spent', title: 'Digital Marketing Session', amount: -1.5, date: '2026-06-20' },
+];
+
+const INITIAL_MESSAGES = [
+  {
+    id: 'm001',
+    name: 'May Thet Hnin',
+    username: 'maythet',
+    type: 'Private',
+    body: 'Hi! For our English session, please prepare a short self-introduction.',
+    time: 'Today 09:30',
+    direction: 'incoming',
+    unread: true,
+    reaction: '',
+  },
+  {
+    id: 'm002',
+    name: 'Design Exchange Circle',
+    username: 'design-circle',
+    type: 'Group Chat',
+    body: 'Group session: 3 people, 2.5 total credits, Saturday 3 PM.',
+    time: 'Yesterday 20:15',
+    direction: 'incoming',
+    unread: false,
+    reaction: '👍',
+  },
+  {
+    id: 'm003',
+    name: 'Ko Hein Htet',
+    username: 'heinhtetdev',
+    type: 'Private',
+    body: 'I can review your React layout after class. Send the session schedule here.',
+    time: 'Yesterday 18:05',
+    direction: 'incoming',
+    unread: false,
+    reaction: '',
+  },
+];
+
+const CHALLENGES = [
+  { title: 'Complete 3 learning sessions this week', progress: 1, total: 3, reward: 40 },
+  { title: 'Teach 2 hours this month', progress: 1.5, total: 2, reward: 60 },
+  { title: 'Review 5 sessions', progress: 2, total: 5, reward: 30 },
+];
+
+
+
+const INITIAL_TEACHER_APPLICATIONS = [
+  {
+    id: 'ta-demo-001',
+    source: 'demo',
+    userId: 'u002',
+    userName: 'May Thet Hnin',
+    username: 'maythet',
+    email: 'may@example.com',
+    subject: 'English Speaking',
+    requestedRole: 'teacher',
+    learnerLevel: 'Advanced',
+    teacherLevelClaim: 'IELTS coach / Advanced conversation mentor',
+    linkedInUrl: 'https://linkedin.com/in/maythet-demo',
+    cvUrl: 'https://example.com/may-cv.pdf',
+    licenseUrl: 'https://example.com/may-certificate.pdf',
+    authorityName: 'Demo Language Center',
+    note: 'Wants to teach interview practice and speaking confidence.',
+    status: 'Pending',
+    submittedAt: '2026-06-23T09:00:00.000Z',
+    reviewTrail: [],
+  },
+];
+
+const INITIAL_COMMUNITY_POSTS = [
+  {
+    id: 'c001',
+    community: 'Japanese N5 Learners',
+    title: 'How do I remember particles は and が?',
+    body: 'I keep confusing topic and subject particles. Any quick examples or memory tips?',
+    author: 'Aung Min Thu',
+    votes: 42,
+    comments: ['Use は for topic contrast and が when introducing new subject.', 'Try sentence cards with one missing particle.'],
+    tags: ['Japanese', 'N5', 'Language'],
+  },
+  {
+    id: 'c002',
+    community: 'Video Editing',
+    title: 'Need a simple color grading workflow',
+    body: 'I only need a few tips, not a full 1-hour session. What should I fix first?',
+    author: 'Su Myat Noe',
+    votes: 28,
+    comments: ['Balance exposure first, then white balance, then creative look.'],
+    tags: ['Video Editing', 'Creative'],
+  },
+];
+
+const INITIAL_QUESTS = [];
+
+const CREDIT_PRODUCTS = [
+  { id: 'cp01', title: '5 Credit Points', credits: 5, price: '$5 demo', productType: 'credit_points' },
+  { id: 'cp02', title: 'Lecture Video Pack', credits: 0, price: '$9 demo', productType: 'lecture_video' },
+];
+
+const LECTURE_VIDEOS = [
+  { id: 'free-ui-basics', title: 'UI/UX Basics for Beginners', teacher: 'Ei Mon', category: 'Design', duration: '18 min', level: 'Beginner', priceCredits: 0, description: 'A quick free starter lesson about layout, spacing, and visual hierarchy.', badge: 'Free' },
+  { id: 'free-english-speaking', title: 'Daily English Speaking Warmups', teacher: 'Aung Min Thu', category: 'Language', duration: '12 min', level: 'Beginner', priceCredits: 0, description: 'Practice confidence, pronunciation, and simple conversation patterns.', badge: 'Free' },
+  { id: 'paid-react-project', title: 'Build a React Mini Project', teacher: 'May Thandar', category: 'Programming', duration: '54 min', level: 'Intermediate', priceCredits: 1.5, description: 'A practical teacher-posted lecture for building components, state, and clean UI.', badge: 'Premium' },
+  { id: 'paid-video-editing', title: 'Video Editing Workflow Masterclass', teacher: 'Su Myat Noe', category: 'Creative', duration: '47 min', level: 'Intermediate', priceCredits: 1.25, description: 'Learn timeline setup, cuts, color correction, captions, and export settings.', badge: 'Premium' },
+  { id: 'paid-japanese-n5', title: 'Japanese N5 Grammar Pack', teacher: 'Hnin Wai', category: 'Language', duration: '63 min', level: 'N5', priceCredits: 1.75, description: 'Structured grammar explanations with examples and short review tasks.', badge: 'Premium' },
+];
+
+const LOAN_POLICY = {
+  min: 0.5,
+  maxOutstanding: 5,
+  maxSingleLoan: 3,
+  minDays: 7,
+  maxDays: 30,
+};
+
+const TEACHING_ALLOWED_ROLES = ['assistant_teacher', 'teacher', 'community_mentor', 'administrator'];
+const CREDIT_PER_MINUTE = 1 / 60;
+const CREDIT_PRICE_TABLE = [
+  { minutes: 1, credits: 0.0167 },
+  { minutes: 5, credits: 0.0833 },
+  { minutes: 10, credits: 0.1667 },
+  { minutes: 15, credits: 0.25 },
+  { minutes: 30, credits: 0.5 },
+  { minutes: 45, credits: 0.75 },
+  { minutes: 60, credits: 1 },
+];
+const TEACHER_LEVEL_RATES = {
+  beginner: CREDIT_PER_MINUTE,
+  intermediate: CREDIT_PER_MINUTE,
+  advanced: CREDIT_PER_MINUTE,
+  expert: CREDIT_PER_MINUTE,
+  certified: CREDIT_PER_MINUTE,
+};
+const DEFAULT_STUDENT_LIMIT_BY_LEVEL = {
+  beginner: 2,
+  intermediate: 4,
+  advanced: 6,
+  expert: 8,
+  certified: 10,
+};
+
+function normalizeLevel(value = '') {
+  const text = normalizeText(value);
+  if (text.includes('cert')) return 'certified';
+  if (text.includes('expert') || text.includes('n1')) return 'expert';
+  if (text.includes('advanced') || text.includes('n2')) return 'advanced';
+  if (text.includes('intermediate') || text.includes('n3')) return 'intermediate';
+  return 'beginner';
+}
+
+function minutesToCredits(minutes = 0) {
+  return Number((Math.max(0, Number(minutes) || 0) / 60).toFixed(4));
+}
+
+function formatCredits(value = 0) {
+  const num = Number(value) || 0;
+  return Number(num.toFixed(4)).toString();
+}
+
+function getCreditTableLabel(minutes = 0) {
+  const exact = CREDIT_PRICE_TABLE.find((item) => item.minutes === Number(minutes));
+  if (exact) return `${exact.minutes} min = ${formatCredits(exact.credits)} credit`;
+  return `${Number(minutes) || 0} min = ${formatCredits(minutesToCredits(minutes))} credit`;
+}
+
+function getSkillRatePerMinute() {
+  return CREDIT_PER_MINUTE;
+}
+
+function getPersonCertificateSummary(person = {}) {
+  const offered = person.offered || person.skillsOffered || [];
+  if (!offered.length) return 'No teaching certificate/level listed yet';
+  return offered.map((skill) => `${skill.name}: ${skill.level || 'Level not set'}${skill.certificate ? ` • ${skill.certificate}` : ''}`).join(' | ');
+}
+
+function findBestTeachingSkill(person = {}, topic = '') {
+  const offered = person.offered || person.skillsOffered || [];
+  if (!offered.length) return null;
+  const normalizedTopic = normalizeText(topic);
+  return offered.find((skill) => normalizedTopic && normalizeText(`${skill.name} ${skill.category}`).includes(normalizedTopic))
+    || offered.find((skill) => normalizedTopic && normalizedTopic.includes(normalizeText(skill.name)))
+    || offered[0];
+}
+
+function getTeacherRateInfo(person = {}, topic = '') {
+  const skill = findBestTeachingSkill(person, topic) || {};
+  const level = skill.level || 'Beginner';
+  const rate = getSkillRatePerMinute(skill);
+  return { skill, level, rate, label: `${level} • standard time credit pricing` };
+}
+
+function getSeatLimitForPerson(person = {}) {
+  if (Number(person.studentLimit) > 0) return Number(person.studentLimit);
+  const bestSkill = findBestTeachingSkill(person) || {};
+  return DEFAULT_STUDENT_LIMIT_BY_LEVEL[normalizeLevel(bestSkill.level)] || 3;
+}
+
+function getTeacherSeatInfo(person = {}, sessions = []) {
+  const limit = getSeatLimitForPerson(person);
+  const activeBookings = sessions.filter((session) =>
+    session.teacher === person.fullName && !['Completed', 'Cancelled', 'Rejected'].includes(session.status)
+  ).length;
+  const available = Math.max(0, limit - activeBookings);
+  return { limit, activeBookings, available, full: available <= 0 };
+}
+
+function getTeacherForName(name = '') {
+  return PEOPLE.find((person) => person.fullName === name || person.username === name || normalizeText(person.fullName) === normalizeText(name));
+}
+
+function getScheduledMinutes(session = {}) {
+  if (session.durationMinutes !== undefined && session.durationMinutes !== null) return Number(session.durationMinutes) || 0;
+  if (session.durationHours !== undefined && session.durationHours !== null) return Number(session.durationHours) * 60 || 0;
+  const raw = Number(session.duration || 0);
+  return raw > 12 ? raw : raw * 60;
+}
+
+function getBillableMinutes(session = {}) {
+  const verified = Number(session.verifiedDurationMinutes || 0);
+  const actual = Number(session.actualDurationMinutes || 0);
+  if (verified > 0) return verified;
+  if (actual > 0) return actual;
+  return getScheduledMinutes(session);
+}
+
+function getSessionCreditRate(session = {}) {
+  return Number(session.creditRatePerMinute || session.ratePerMinute || CREDIT_PER_MINUTE);
+}
+
+function getBillableCredits(session = {}) {
+  return minutesToCredits(getBillableMinutes(session), getSessionCreditRate(session));
+}
+
+function createSecureRoomId() {
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  return `room-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function buildJitsiRoomName(roomId = '') {
+  const safeId = String(roomId || createSecureRoomId()).replace(/[^a-zA-Z0-9]/g, '');
+  return `KnowHow-${safeId}`;
+}
+
+function buildMeetingUrl(roomId) {
+  return `https://meet.jit.si/${buildJitsiRoomName(roomId)}`;
+}
+
+function isExternalMeetingLink(link = '') {
+  return /^https?:\/\//i.test(link);
+}
+
+function getSessionRoom(session) {
+  return session.roomId || session.meetingRoomId || '';
+}
+
+function getParticipantRole(session, user) {
+  if (session.teacher === user.fullName) return 'mentor';
+  if (session.learner === user.fullName) return 'learner';
+  return '';
+}
+
+function saveState(user, sessions, transactions) {
+  localStorage.setItem('knowhow-user', JSON.stringify(user));
+  localStorage.setItem('knowhow-sessions', JSON.stringify(sessions));
+  localStorage.setItem('knowhow-transactions', JSON.stringify(transactions));
+}
+
+function loadState(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function loadTeacherApplications() {
+  const stored = loadState('knowhow-teacher-applications', null);
+  if (stored && Array.isArray(stored)) return stored;
+  return INITIAL_TEACHER_APPLICATIONS;
+}
+
+function saveTeacherApplications(applications) {
+  localStorage.setItem('knowhow-teacher-applications', JSON.stringify(applications));
+}
+
+function openChatIntent(contactName) {
+  localStorage.setItem('knowhow-open-chat', contactName);
+}
+
+function formatNowLabel() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function attachmentLabel(attachment) {
+  if (!attachment) return '';
+  if (attachment.kind === 'video') return `🎬 ${attachment.name || 'Video'}`;
+  if (attachment.kind === 'image') return `📷 ${attachment.name || 'Image'}`;
+  return `📎 ${attachment.name || 'Attachment'}`;
+}
+
+function messagePreview(message = {}) {
+  if (message.attachment) return attachmentLabel(message.attachment);
+  return message.body || 'No messages yet';
+}
+
+
+function normalizeWallet(wallet = {}) {
+  return {
+    current: Number(wallet.current || 0),
+    earned: Number(wallet.earned || 0),
+    spent: Number(wallet.spent || 0),
+    loanOutstanding: Number(wallet.loanOutstanding || 0),
+    loanDueDate: wallet.loanDueDate || '',
+    purchased: Number(wallet.purchased || 0),
+    lectureAccess: Number(wallet.lectureAccess || 0),
+  };
+}
+
+function canUserTeach(user) {
+  return TEACHING_ALLOWED_ROLES.includes(user.rawRole) || ['Assistant Teacher', 'Teacher', 'Community Mentor', 'Administrator'].includes(user.role);
+}
+
+function isAdminRoute() {
+  return window.location.pathname.replace(/\/$/, '') === '/admin' || window.location.hash === '#admin';
+}
+
+function getCurrentLevel(xp) {
+  let current = XP_LEVELS[0];
+  for (const level of XP_LEVELS) {
+    if (xp >= level.min) current = level;
+  }
+  const nextLevel = XP_LEVELS.find((level) => level.min > xp);
+  const next = nextLevel?.min ?? current.next;
+  const progress = Math.min(100, Math.round(((xp - current.min) / (next - current.min)) * 100));
+  return { ...current, next, progress };
+}
+
+function normalizeText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function tokenize(value) {
+  return normalizeText(value).split(' ').filter(Boolean);
+}
+
+function wordOverlapScore(a, b) {
+  const aTokens = new Set(tokenize(a));
+  const bTokens = tokenize(b);
+  if (!aTokens.size || !bTokens.length) return 0;
+  return bTokens.filter((token) => aTokens.has(token)).length;
+}
+
+function skillPairScore(wanted = {}, offered = {}) {
+  const wantedName = normalizeText(wanted.name);
+  const offeredName = normalizeText(offered.name);
+  const wantedCategory = normalizeText(wanted.category);
+  const offeredCategory = normalizeText(offered.category);
+  if (wantedName && offeredName && wantedName === offeredName) return 40;
+  if (wantedName && offeredName && (wantedName.includes(offeredName) || offeredName.includes(wantedName))) return 34;
+  const overlap = wordOverlapScore(wantedName, offeredName);
+  if (overlap > 0) return 25 + Math.min(8, overlap * 3);
+  if (wantedCategory && offeredCategory && wantedCategory === offeredCategory) return 20;
+  return 0;
+}
+
+function calculateVerifiedOverlapMinutes(attendance = [], nowForOpen = '') {
+  const merge = (intervals) => {
+    const sorted = intervals
+      .filter((item) => item.start && item.end && item.end > item.start)
+      .sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const item of sorted) {
+      const last = merged[merged.length - 1];
+      if (!last || item.start > last.end) merged.push({ ...item });
+      else last.end = Math.max(last.end, item.end);
+    }
+    return merged;
+  };
+  const toIntervals = (role) => merge(attendance
+    .filter((item) => item.role === role && item.joinedAt && (item.leftAt || nowForOpen))
+    .map((item) => ({ start: new Date(item.joinedAt).getTime(), end: new Date(item.leftAt || nowForOpen).getTime() })));
+  const mentors = toIntervals('mentor');
+  const learners = toIntervals('learner');
+  let overlapMs = 0;
+  for (const mentor of mentors) {
+    for (const learner of learners) {
+      overlapMs += Math.max(0, Math.min(mentor.end, learner.end) - Math.max(mentor.start, learner.start));
+    }
+  }
+  return Number((overlapMs / 60000).toFixed(2));
+}
+
+function calculateActualAttendanceMinutes(attendance = [], nowForOpen = '') {
+  const totals = attendance.reduce((acc, item) => {
+    if (!item.joinedAt || !(item.leftAt || nowForOpen)) return acc;
+    const minutes = Math.max(0, (new Date(item.leftAt || nowForOpen).getTime() - new Date(item.joinedAt).getTime()) / 60000);
+    acc[item.role] = (acc[item.role] || 0) + minutes;
+    return acc;
+  }, { mentor: 0, learner: 0 });
+  return Number(Math.max(totals.mentor || 0, totals.learner || 0).toFixed(2));
+}
+
+function sessionAttendanceFields(attendance = [], nowForOpen = '') {
+  const firstJoined = (role) => attendance.filter((item) => item.role === role && item.joinedAt).map((item) => item.joinedAt).sort()[0] || '';
+  const lastLeft = (role) => attendance.filter((item) => item.role === role && item.leftAt).map((item) => item.leftAt).sort().at(-1) || '';
+  const verifiedDurationMinutes = calculateVerifiedOverlapMinutes(attendance, nowForOpen);
+  return {
+    mentorJoinedAt: firstJoined('mentor'),
+    mentorLeftAt: lastLeft('mentor'),
+    learnerJoinedAt: firstJoined('learner'),
+    learnerLeftAt: lastLeft('learner'),
+    actualDurationMinutes: calculateActualAttendanceMinutes(attendance, nowForOpen),
+    verifiedDurationMinutes,
+    attendanceVerified: verifiedDurationMinutes > 0,
+  };
+}
+
+function ensureStoredSessionRoom(session = {}) {
+  const roomId = getSessionRoom(session) || createSecureRoomId();
+  return {
+    ...session,
+    roomId,
+    meetingLink: session.meetingLink || buildMeetingUrl(roomId),
+    meetingProvider: session.meetingProvider || 'Know-how Room',
+    meetingSpaceName: session.meetingSpaceName || buildJitsiRoomName(roomId),
+  };
+}
+
+function calculateMatch(user, person) {
+  const wantedToOffered = user.skillsWanted.reduce((sum, wanted) => sum + Math.max(0, ...person.offered.map((offered) => skillPairScore(wanted, offered))), 0);
+  const offeredToWanted = user.skillsOffered.reduce((sum, offered) => sum + Math.max(0, ...person.wanted.map((wanted) => skillPairScore(wanted, offered))), 0);
+  const sharedLanguages = person.languages.filter((language) => user.languages.includes(language));
+  const language = sharedLanguages.length ? 12 : 0;
+  const sameRegion = normalizeText(person.region.split(',')[0]) === normalizeText(user.region.split(',')[0]) ? 8 : 0;
+  const reputationScore = Math.min(18, Math.round(person.reputation / 6));
+  const completionScore = person.completion >= 90 ? 7 : 0;
+  const total = Math.min(99, wantedToOffered + offeredToWanted + language + sameRegion + reputationScore + completionScore);
+  const reasons = [];
+  if (wantedToOffered) reasons.push('Teaches what you want');
+  if (offeredToWanted) reasons.push('Wants what you teach');
+  if (sharedLanguages.length) reasons.push(`Shared language: ${sharedLanguages.join(', ')}`);
+  if (sameRegion) reasons.push('Same region');
+  if (person.reputation >= 85) reasons.push('Strong reputation');
+  return {
+    total,
+    reason: reasons.slice(0, 3).join(' • ') || 'General community match',
+    directOne: wantedToOffered > 0,
+    directTwo: offeredToWanted > 0,
+    reasons,
+    wantedToOffered,
+    offeredToWanted,
+  };
+}
+
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const [loggedIn, setLoggedIn] = useState(() => Boolean(localStorage.getItem('knowhow-token')));
+  const [authLoading, setAuthLoading] = useState(() => Boolean(localStorage.getItem('knowhow-token')));
+  const [user, setUser] = useState(() => {
+    const storedUser = loadState('knowhow-user', DEFAULT_USER);
+    return { ...storedUser, wallet: normalizeWallet(storedUser.wallet) };
+  });
+  const [sessions, setSessions] = useState(() => loadState('knowhow-sessions', INITIAL_SESSIONS));
+  const [transactions, setTransactions] = useState(() => loadState('knowhow-transactions', INITIAL_TRANSACTIONS));
+  const [messages, setMessages] = useState(() => loadState('knowhow-messages', INITIAL_MESSAGES));
+  const [communityPosts, setCommunityPosts] = useState(() => loadState('knowhow-community-posts', INITIAL_COMMUNITY_POSTS));
+  const [teacherApplications, setTeacherApplications] = useState(() => loadTeacherApplications());
+  const [adminAuthed, setAdminAuthed] = useState(() => Boolean(localStorage.getItem('knowhow-admin-token')));
+  const [adminMode, setAdminMode] = useState(() => isAdminRoute() || Boolean(localStorage.getItem('knowhow-admin-token')));
+  const [authToast, setAuthToast] = useState('');
+  const [navSearchQuery, setNavSearchQuery] = useState('');
+
+  useEffect(() => {
+    const syncAdminRoute = () => setAdminMode(isAdminRoute() || Boolean(localStorage.getItem('knowhow-admin-token')));
+    window.addEventListener('hashchange', syncAdminRoute);
+    window.addEventListener('popstate', syncAdminRoute);
+    return () => {
+      window.removeEventListener('hashchange', syncAdminRoute);
+      window.removeEventListener('popstate', syncAdminRoute);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authToast) return undefined;
+    const timer = window.setTimeout(() => setAuthToast(''), 2600);
+    return () => window.clearTimeout(timer);
+  }, [authToast]);
+
+
+  function updateMessages(nextMessages) {
+    setMessages(nextMessages);
+    localStorage.setItem('knowhow-messages', JSON.stringify(nextMessages));
+  }
+
+
+  function updateTeacherApplications(nextApplications) {
+    setTeacherApplications(nextApplications);
+    saveTeacherApplications(nextApplications);
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleMeetStatus = params.get('googleMeet');
+    if (googleMeetStatus) {
+      setPage('sessions');
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    }
+  }, []);
+
+  useEffect(() => {
+    async function loadCurrentUser() {
+      const token = localStorage.getItem('knowhow-token');
+      if (!token) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const data = await apiRequest('/auth/me');
+        const normalized = normalizeBackendUser(data.user, data.wallet);
+        const nextUser = { ...normalized, wallet: normalizeWallet(normalized.wallet) };
+        setUser(nextUser);
+        saveState(nextUser, sessions, transactions);
+        setLoggedIn(true);
+      } catch (error) {
+        localStorage.removeItem('knowhow-token');
+        localStorage.removeItem('knowhow-user');
+        setLoggedIn(false);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    loadCurrentUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const level = getCurrentLevel(user.xp);
+
+  function handleAuthSuccess({ token, user: apiUser, wallet, authAction }) {
+    localStorage.setItem('knowhow-token', token);
+    const normalized = normalizeBackendUser(apiUser, wallet);
+    const nextUser = { ...normalized, wallet: normalizeWallet(normalized.wallet) };
+    setUser(nextUser);
+    saveState(nextUser, sessions, transactions);
+    setLoggedIn(true);
+    setAuthToast(authAction === 'register' ? 'Account created successfully' : 'Login successful');
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('knowhow-token');
+    localStorage.removeItem('knowhow-user');
+    setLoggedIn(false);
+  }
+
+  function updateUser(nextUserOrUpdater) {
+    setUser((currentUser) => {
+      const resolved = typeof nextUserOrUpdater === 'function' ? nextUserOrUpdater(currentUser) : nextUserOrUpdater;
+      if (!resolved) return currentUser;
+      const normalized = { ...resolved, wallet: normalizeWallet(resolved.wallet) };
+      saveState(normalized, sessions, transactions);
+      return normalized;
+    });
+  }
+
+  function updateSessions(nextSessions) {
+    setSessions(nextSessions);
+    saveState(user, nextSessions, transactions);
+  }
+
+  function updateTransactions(nextTransactions, nextUser = user) {
+    setTransactions(nextTransactions);
+    saveState(nextUser, sessions, nextTransactions);
+  }
+
+  if (adminMode) {
+    return (
+      <AdminShell
+        adminAuthed={adminAuthed}
+        setAdminAuthed={setAdminAuthed}
+        setAdminMode={setAdminMode}
+        sessions={sessions}
+        people={PEOPLE}
+        transactions={transactions}
+        userTheme={user.theme}
+        teacherApplications={teacherApplications}
+        setTeacherApplications={updateTeacherApplications}
+        setUser={updateUser}
+      />
+    );
+  }
+
+  if (authLoading) {
+    return <div className="auth-shell"><section className="auth-card glass"><h1>Loading Know-how...</h1><p>Checking your saved login.</p></section></div>;
+  }
+
+  if (!loggedIn) {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  const pages = {
+    dashboard: <Dashboard user={user} level={level} sessions={sessions} setPage={setPage} />,
+    search: <SearchPage user={user} people={PEOPLE} posts={communityPosts} sessions={sessions} messages={messages} setMessages={updateMessages} setPage={setPage} initialQuery={navSearchQuery} />,
+    wallet: <WalletPage user={user} setUser={updateUser} transactions={transactions} setTransactions={updateTransactions} />,
+    sessions: <SessionsPage user={user} setUser={updateUser} sessions={sessions} setSessions={updateSessions} transactions={transactions} setTransactions={updateTransactions} />,
+    community: <CommunityPage user={user} posts={communityPosts} setPosts={(next) => { setCommunityPosts(next); localStorage.setItem('knowhow-community-posts', JSON.stringify(next)); }} />,
+    video: <VideoPanelPage user={user} setUser={updateUser} />,
+    friends: <FriendPage user={user} people={PEOPLE} setPage={setPage} setNavSearchQuery={setNavSearchQuery} />,
+    messages: <MessagesPage messages={messages} setMessages={updateMessages} sessions={sessions} setSessions={updateSessions} user={user} people={PEOPLE} setPage={setPage} />,
+    profile: <ProfilePage user={user} setUser={updateUser} level={level} teacherApplications={teacherApplications} setTeacherApplications={updateTeacherApplications} />,
+    settings: <SettingsPage user={user} setUser={updateUser} onLogout={handleLogout} />,
+  };
+
+  return (
+    <div className={`app ${user.theme === 'dark' ? 'dark' : ''}`}>
+      {authToast && <SuccessToast message={authToast} />}
+      <Sidebar page={page} setPage={setPage} user={user} level={level} navSearchQuery={navSearchQuery} setNavSearchQuery={setNavSearchQuery} />
+      <main className="main main-with-nav-actions">
+        {pages[page]}
+      </main>
+    </div>
+  );
+}
+
+
+function ProfileOptionLists() {
+  return (
+    <>
+      <datalist id="language-options">
+        {LANGUAGE_OPTIONS.map((item) => <option key={item} value={item} />)}
+      </datalist>
+      <datalist id="region-options">
+        {REGION_OPTIONS.map((item) => <option key={item} value={item} />)}
+      </datalist>
+    </>
+  );
+}
+
+function SuccessToast({ message }) {
+  return (
+    <div className="success-toast" role="status" aria-live="polite">
+      <span>✓</span>
+      <strong>{message}</strong>
+    </div>
+  );
+}
+
+function BrandLogo({ className = '', alt = 'Know-how logo' }) {
+  return <img src={knowhowLogo} alt={alt} className={`brand-logo ${className}`.trim()} />;
+}
+
+function AuthScreen({ onAuthSuccess }) {
+  const [mode, setMode] = useState('login');
+  const [form, setForm] = useState({
+    fullName: '',
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    region: 'Yangon, Myanmar',
+    language: 'Myanmar, English',
+    age: '',
+    interests: 'English Speaking, UI/UX Design',
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setError('');
+  }
+
+  function validateAccount() {
+    if (!String(form.email || '').trim()) return 'Email is required.';
+    if (!String(form.password || '').trim()) return 'Password is required.';
+    if (String(form.password).length < 6) return 'Password must be at least 6 characters.';
+    return '';
+  }
+
+  function validateRegistration() {
+    const accountError = validateAccount();
+    if (accountError) return accountError;
+    if (form.password !== form.confirmPassword) return 'Confirmation password does not match.';
+    const requiredFields = [
+      ['fullName', 'Name is required.'],
+      ['username', 'Username is required.'],
+      ['language', 'Language is required.'],
+      ['region', 'Region is required.'],
+      ['age', 'Age is required.'],
+    ];
+    for (const [field, message] of requiredFields) {
+      if (!String(form[field] || '').trim()) return message;
+    }
+    const age = Number(form.age);
+    if (!Number.isFinite(age) || age < 13 || age > 120) return 'Age must be between 13 and 120.';
+    if (!/^[a-z0-9_]{3,24}$/.test(form.username)) return 'Username must be 3-24 characters: lowercase letters, numbers, underscore only.';
+    return '';
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    setError('');
+    const validationError = mode === 'register' ? validateRegistration() : validateAccount();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setLoading(true);
+
+    try {
+      const path = mode === 'login' ? '/auth/login' : '/auth/register';
+      const payload = mode === 'login'
+        ? { email: form.email.trim(), password: form.password }
+        : {
+            email: form.email.trim(),
+            password: form.password,
+            fullName: form.fullName.trim(),
+            username: form.username.trim(),
+            region: form.region.trim(),
+            age: Number(form.age),
+            languages: form.language.split(',').map((item) => item.trim()).filter(Boolean),
+            interests: form.interests.split(',').map((item) => item.trim()).filter(Boolean),
+          };
+
+      const data = await apiRequest(path, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      localStorage.setItem('knowhow-token', data.token);
+      const me = await apiRequest('/auth/me');
+      onAuthSuccess({ token: data.token, user: me.user, wallet: me.wallet, authAction: mode });
+    } catch (error) {
+      setError(error.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell polished-auth-shell clean-auth-shell">
+      <div className="auth-visual-panel">
+        <span className="auth-badge">Know-how Web Application</span>
+        <h2>Learn from real people, not random tabs.</h2>
+        <p>Search teachers, message like Messenger, schedule sessions, join video rooms, and grow with Time Credits.</p>
+        <div className="auth-feature-grid"><span>🔎 Social search</span><span>💬 Messenger chat</span><span>🎓 Verified teachers</span><span>📹 Video sessions</span></div>
+      </div>
+      <form className="auth-card glass register-card clean-auth-card" onSubmit={submitAuth}>
+        <div className="logo large logo-image-mark"><BrandLogo className="brand-logo-auth" /></div>
+        <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
+        <p>{mode === 'login' ? 'Log in to continue learning and teaching.' : 'Set up your Know-how profile in a clean, simple form.'}</p>
+        <ProfileOptionLists />
+        <div className="tabs compact auth-tabs">
+          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>Login</button>
+          <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>Register</button>
+        </div>
+
+        <div className="auth-form-section account-section">
+          <div className="auth-section-label"><span>Account</span></div>
+          <label>Email</label>
+          <input value={form.email} onChange={(event) => updateField('email', event.target.value)} placeholder="you@example.com" type="email" required />
+          <div className={`form-grid ${mode === 'register' ? 'two' : 'one'}`}>
+            <div><label>Password</label><input value={form.password} onChange={(event) => updateField('password', event.target.value)} type="password" placeholder="••••••••" minLength={6} required /></div>
+            {mode === 'register' && <div><label>Confirm Password</label><input value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} type="password" placeholder="••••••••" minLength={6} required /></div>}
+          </div>
+        </div>
+
+        {mode === 'register' && (
+          <div className="auth-form-section profile-setup-section">
+            <div className="auth-section-label"><span>Profile</span></div>
+            <div className="form-grid two">
+              <div><label>Name</label><input value={form.fullName} onChange={(event) => updateField('fullName', event.target.value)} placeholder="Your real display name" required /></div>
+              <div><label>Username</label><input value={form.username} onChange={(event) => updateField('username', event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} placeholder="username" required /></div>
+            </div>
+            <div className="form-grid two">
+              <div><label>Language</label><input list="language-options" value={form.language} onChange={(event) => updateField('language', event.target.value)} placeholder="Choose or type any language" required /></div>
+              <div><label>Region</label><input list="region-options" value={form.region} onChange={(event) => updateField('region', event.target.value)} placeholder="Choose or type any region" required /></div>
+            </div>
+            <div className="form-grid two">
+              <div><label>Age</label><input type="number" min="13" max="120" value={form.age} onChange={(event) => updateField('age', event.target.value)} placeholder="Age" required /></div>
+              <div><label>Interests</label><input value={form.interests} onChange={(event) => updateField('interests', event.target.value)} placeholder="Japanese, Editing, Design" /></div>
+            </div>
+          </div>
+        )}
+
+        {error && <p className="error-text">{error}</p>}
+        <button className="primary full auth-submit" type="submit" disabled={loading}>{loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Account'}</button>
+      </form>
+    </div>
+  );
+}
+
+function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery }) {
+  const items = [
+    ['dashboard', 'Home'],
+    ['community', 'Community'],
+    ['video', 'Video'],
+    ['messages', 'Messages'],
+    ['sessions', 'Sessions'],
+    ['settings', 'Settings'],
+  ];
+
+  function submitSearch(event) {
+    event.preventDefault();
+    if (!String(navSearchQuery || '').trim()) return;
+    setPage('search');
+  }
+
+  return (
+    <header className="sidebar top-navigation">
+      <div className="brand top-brand">
+        <div className="logo logo-image-mark"><BrandLogo className="brand-logo-nav" /></div>
+        <div><h2>Know-how</h2><span>Learning Network</span></div>
+      </div>
+      <nav className="top-nav-menu" aria-label="Primary navigation">
+        <button className="nav-search-icon-only" type="button" onClick={() => { setNavSearchQuery(''); setPage('search'); }} title="Search people" aria-label="Search people">
+          ⌕
+        </button>
+        {items.map(([key, label]) => (
+          <button key={key} className={page === key ? 'active' : ''} onClick={() => setPage(key)} title={label}>
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="topbar-actions nav-account-actions" aria-label="Account shortcuts">
+        <button className="credit-balance" type="button" onClick={() => setPage('wallet')} title="Open credit wallet">
+          <span className="credit-balance-icon" aria-hidden="true">◎</span>
+          <span className="credit-balance-copy"><span>Credit balance</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
+        </button>
+        <button className="profile-shortcut" type="button" onClick={() => setPage('profile')} title="Open profile">
+          <Avatar text={user.avatar} />
+          <span className="profile-shortcut-copy"><strong>{user.username}</strong><small>{level.name}</small></span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function Topbar({ user, level, setPage }) {
+  return (
+    <header className="topbar topbar-compact">
+      <div className="topbar-actions" aria-label="Account shortcuts">
+        <button className="credit-balance" type="button" onClick={() => setPage('wallet')} title="Open credit wallet">
+          <span className="credit-balance-icon" aria-hidden="true">◎</span>
+          <span className="credit-balance-copy"><span>Credit balance</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
+        </button>
+        <button className="profile-shortcut" type="button" onClick={() => setPage('profile')} title="Open profile">
+          <Avatar text={user.avatar} />
+          <span className="profile-shortcut-copy"><strong>{user.username}</strong><small>{level.name}</small></span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function Dashboard({ user, level, sessions, setPage }) {
+  const nextSession = sessions.find((session) => session.status !== 'Completed');
+  return (
+    <section className="page-grid">
+      <div className="hero card wide">
+        <div>
+          <p className="eyebrow">1 hour shared = 1 Time Credit</p>
+          <h2>Learn without money. Teach with contribution.</h2>
+          <p>Know-how connects learners and mentors through fair skill exchange, Time Credits, search, and reputation.</p>
+          <div className="actions">
+            <button className="primary" onClick={() => setPage('search')}>Search Teachers</button>
+            <button className="ghost" onClick={() => setPage('sessions')}>Create Session</button>
+          </div>
+        </div>
+        <div className="credit-orb">
+          <span>{user.wallet.current}</span>
+          <small>Time Credits</small>
+        </div>
+      </div>
+
+      <StatCard label="Current Credits" value={user.wallet.current} hint="Available balance" />
+      <StatCard label="XP Level" value={level.name} hint={`${user.xp}/${level.next} XP`} />
+      <StatCard label="Daily Streak" value={`${user.streak} days`} hint="Keep learning" />
+      <StatCard label="Badges" value={user.badges.length} hint="Unlocked achievements" />
+
+      <div className="card wide">
+        <div className="section-title">
+          <h3>Level Progress</h3>
+          <span>{level.progress}%</span>
+        </div>
+        <div className="progress"><span style={{ width: `${level.progress}%` }} /></div>
+      </div>
+
+      <div className="card">
+        <h3>Upcoming Session</h3>
+        {nextSession ? <SessionMini session={nextSession} /> : <p>No upcoming sessions.</p>}
+      </div>
+
+
+      <div className="card wide">
+        <h3>Start from your interests</h3>
+        <div className="pill-wrap left">
+          {(user.interests || []).map((interest) => <button key={interest} className="ghost" onClick={() => setPage('search')}>{interest}</button>)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SearchPage({ user, people, posts, sessions, messages, setMessages, setPage, initialQuery = '' }) {
+  const [query, setQuery] = useState(initialQuery || '');
+  const [category, setCategory] = useState('What to learn/teach');
+  const [level, setLevel] = useState('Any level');
+  const [language, setLanguage] = useState('Any language');
+  const [selected, setSelected] = useState(null);
+  const [friends, setFriends] = useState(() => loadState('knowhow-friends', []));
+  const [outgoingRequests, setOutgoingRequests] = useState(() => loadState('knowhow-friend-outgoing', []));
+  const [reportedUsers, setReportedUsers] = useState(() => loadState('knowhow-reported-users', []));
+  const [profileActionNotice, setProfileActionNotice] = useState('');
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [reportDraft, setReportDraft] = useState({ reason: 'Spam or scam', details: '' });
+
+  useEffect(() => {
+    setQuery(initialQuery || '');
+  }, [initialQuery]);
+
+  const allAccounts = useMemo(() => {
+    const currentAccount = {
+      id: user.id || 'current-user',
+      fullName: user.fullName,
+      username: user.username,
+      avatar: user.avatar,
+      bio: user.bio || 'Know-how learner profile.',
+      region: user.region,
+      languages: user.languages || [],
+      interests: user.interests || [],
+      reputation: user.xp || 0,
+      rating: 5,
+      completion: 100,
+      hoursShared: user.wallet?.earned || 0,
+      offered: user.skillsOffered || [],
+      wanted: user.skillsWanted || [],
+      isCurrentUser: true,
+      email: user.email,
+      role: user.role,
+      age: user.age,
+      education: user.education,
+      work: user.work,
+      portfolio: user.portfolio,
+      social: user.social,
+    };
+    return [currentAccount, ...people];
+  }, [user, people]);
+  const languages = useMemo(() => ['Any language', ...Array.from(new Set(allAccounts.flatMap((person) => person.languages || []).filter(Boolean)))], [allAccounts]);
+  const searchCategories = useMemo(() => ['What to learn/teach', ...CATEGORIES.filter((item) => item !== 'All')], []);
+  const searchLevels = useMemo(() => ['Any level', ...LEVELS.filter((item) => item !== 'All')], []);
+  const hasSearch = query.trim() || category !== 'What to learn/teach' || level !== 'Any level' || language !== 'Any language';
+
+  useEffect(() => {
+    setQuery(initialQuery || '');
+  }, [initialQuery]);
+
+  function accountText(person) {
+    return normalizeText([
+      person.fullName,
+      person.username,
+      person.bio,
+      person.region,
+      (person.languages || []).join(' '),
+      (person.interests || []).join(' '),
+      ...(person.offered || []).map((skill) => `${skill.name} ${skill.category} ${skill.level} ${skill.certificate || ''} ${skill.description || ''}`),
+      ...(person.wanted || []).map((skill) => `${skill.name} ${skill.category} ${skill.target} ${skill.goal || ''}`),
+    ].join(' '));
+  }
+
+  function matchAccount(person) {
+    const textMatch = accountText(person);
+    const qTokens = tokenize(query);
+    const allQueryTokensMatch = !qTokens.length || qTokens.every((token) => textMatch.includes(token));
+    const allSkills = [...(person.offered || []), ...(person.wanted || [])];
+    const categoryIsNeutral = category === 'What to learn/teach' || category === 'Any skill' || category === 'All';
+    const categoryMatch = categoryIsNeutral || allSkills.some((skill) => normalizeText(skill.category) === normalizeText(category) || normalizeText(skill.name).includes(normalizeText(category))) || textMatch.includes(normalizeText(category));
+    const levelMatch = level === 'Any level' || allSkills.some((skill) => normalizeText(skill.level || skill.target).includes(normalizeText(level)));
+    const languageMatch = language === 'Any language' || (person.languages || []).some((item) => normalizeText(item).includes(normalizeText(language)));
+    const interestBoost = (user.interests || []).filter((interest) => textMatch.includes(normalizeText(interest))).length * 3;
+    const queryScore = qTokens.reduce((sum, token) => sum + (textMatch.includes(token) ? 3 : 0), 0);
+    const exactNameBoost = normalizeText(person.fullName).includes(normalizeText(query)) || normalizeText(person.username).includes(normalizeText(query)) ? 8 : 0;
+    return {
+      match: allQueryTokensMatch && categoryMatch && levelMatch && languageMatch,
+      score: queryScore + exactNameBoost + interestBoost + Number(person.rating || 0),
+    };
+  }
+
+  const accountResults = useMemo(() => {
+    if (!hasSearch) {
+      return allAccounts
+        .filter((person) => !person.isCurrentUser)
+        .map((person) => ({ person, score: matchAccount(person).score }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8)
+        .map((item) => item.person);
+    }
+    return allAccounts
+      .map((person) => ({ person, ...matchAccount(person) }))
+      .filter((item) => item.match)
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.person);
+  }, [allAccounts, query, category, level, language, hasSearch]);
+
+  const communityResults = useMemo(() => {
+    if (!hasSearch) return posts.filter((post) => (user.interests || []).some((interest) => normalizeText([post.community, ...(post.tags || [])].join(' ')).includes(normalizeText(interest)))).slice(0, 4);
+    const q = normalizeText(query);
+    return posts.filter((post) => {
+      const textMatch = normalizeText([post.community, post.title, post.body, post.author, ...(post.tags || [])].join(' '));
+      const categoryIsNeutral = category === 'What to learn/teach' || category === 'Any skill' || category === 'All';
+      const categoryMatch = categoryIsNeutral || textMatch.includes(normalizeText(category));
+      const queryMatch = !q || tokenize(q).every((token) => textMatch.includes(token));
+      return categoryMatch && queryMatch;
+    });
+  }, [query, category, posts, hasSearch, user.interests]);
+
+  function startMessage(person) {
+    if (!person || person.isCurrentUser) return;
+    const hasExisting = messages.some((message) => message.name === person.fullName);
+    const nextMessages = hasExisting ? messages : [
+      ...messages,
+      {
+        id: crypto.randomUUID(),
+        name: person.fullName,
+        username: person.username,
+        type: 'Private',
+        body: `You opened a conversation with ${person.fullName}. Say hi or send a schedule request.`,
+        time: 'Now',
+        direction: 'incoming',
+        unread: false,
+      },
+    ];
+    setMessages(nextMessages);
+    openChatIntent(person.fullName);
+    setPage('messages');
+  }
+
+  function requestFriend(person) {
+    if (!person || person.isCurrentUser) return;
+    if (friends.includes(person.id)) {
+      setProfileActionNotice(`${person.fullName} is already your friend.`);
+      return;
+    }
+    if (outgoingRequests.includes(person.id)) {
+      setProfileActionNotice(`Friend request to ${person.fullName} is already pending.`);
+      return;
+    }
+    const next = [...outgoingRequests, person.id];
+    setOutgoingRequests(next);
+    localStorage.setItem('knowhow-friend-outgoing', JSON.stringify(next));
+    setProfileActionNotice(`Friend request sent to ${person.fullName}.`);
+  }
+
+  function submitReport(person) {
+    if (!person || person.isCurrentUser) return;
+    if (!String(reportDraft.details || '').trim()) {
+      setProfileActionNotice('Please add report details before submitting.');
+      return;
+    }
+    const report = {
+      id: crypto.randomUUID(),
+      userId: person.id,
+      userName: person.fullName,
+      reason: reportDraft.reason,
+      details: reportDraft.details.trim(),
+      submittedAt: new Date().toISOString(),
+      status: 'Requested review',
+    };
+    const existingReports = loadState('knowhow-profile-reports', []);
+    localStorage.setItem('knowhow-profile-reports', JSON.stringify([report, ...existingReports]));
+    const nextReported = Array.from(new Set([...reportedUsers, person.id]));
+    setReportedUsers(nextReported);
+    localStorage.setItem('knowhow-reported-users', JSON.stringify(nextReported));
+    setReportDraft({ reason: 'Spam or scam', details: '' });
+    setShowReportForm(false);
+    setProfileActionNotice(`Report info submitted for ${person.fullName}.`);
+  }
+
+  const selectedPerson = selected?.person;
+
+  function renderProfileModal(person) {
+    if (!person) return null;
+    const isFriend = friends.includes(person.id);
+    const isPending = outgoingRequests.includes(person.id);
+    return (
+      <div className="modal-backdrop high-modal-backdrop">
+        <div className="modal card search-profile-modal">
+          <div className="section-title">
+            <h2>{person.isCurrentUser ? 'My Profile' : 'User Profile'}</h2>
+            <button className="icon" type="button" onClick={() => { setSelected(null); setShowReportForm(false); }}>×</button>
+          </div>
+          <div className="profile-display-card search-profile-surface">
+            <div className="profile-head">
+              <Avatar text={person.avatar || getInitials(person.fullName)} large />
+              <div>
+                <h2>{person.fullName}</h2>
+                <p>@{person.username} • {person.role || 'Learner'}</p>
+                <small>⭐ {person.rating || 0} • {person.hoursShared || 0} hours shared • {person.completion || 100}% completion</small>
+              </div>
+            </div>
+            <div className="profile-readonly-grid">
+              <MiniPill title="Email" text={person.email || 'Not added'} />
+              <MiniPill title="Languages" text={(person.languages || []).join(', ') || 'Not added'} />
+              <MiniPill title="Region" text={person.region || 'Not added'} />
+              <MiniPill title="Age" text={person.age || 'Not added'} />
+            </div>
+            <div className="readonly-section"><label>Interests</label><p>{(person.interests || []).join(', ') || 'Not added'}</p></div>
+            <div className="readonly-section"><label>Bio</label><p>{person.bio || 'No bio added yet.'}</p></div>
+            <div className="readonly-section"><label>Education</label><p>{person.education || 'Not added'}</p></div>
+            <div className="readonly-section"><label>Work Experience</label><p>{person.work || 'Not added'}</p></div>
+            <div className="profile-link-grid">
+              <MiniPill title="Portfolio" text={person.portfolio || 'Not added'} />
+              <MiniPill title="Social" text={person.social || 'Not added'} />
+            </div>
+            <div className="profile-detail-grid search-profile-detail-grid">
+              <div><h3>Can Teach</h3><div className="list">{(person.offered || []).length ? person.offered.map((skill) => <MiniPill key={`${skill.name}-${skill.category}`} title={skill.name} text={`${skill.category} • ${skill.level || 'Level not set'} • ${skill.certificate || 'No certificate detail'} • ${getCreditTableLabel((skill.duration || 1) * 60)} • suggested ${(skill.duration || 1)}h`} />) : <p className="muted-text">No teaching skills listed.</p>}</div></div>
+              <div><h3>Wants to Learn</h3><div className="list">{(person.wanted || []).length ? person.wanted.map((skill) => <MiniPill key={`${skill.name}-${skill.category}`} title={skill.name} text={`${skill.category} • target ${skill.target || 'Not set'}`} />) : <p className="muted-text">No learning goals listed.</p>}</div></div>
+            </div>
+            {!person.isCurrentUser && (
+              <div className="profile-action-row search-modal-actions-row">
+                <button className="primary" type="button" onClick={() => startMessage(person)}>Message</button>
+                <button className="danger" type="button" onClick={() => setShowReportForm((current) => !current)}>Report</button>
+              </div>
+            )}
+            {showReportForm && !person.isCurrentUser && (
+              <div className="report-info-panel">
+                <div><strong>Report Info</strong><p className="muted-text">Tell the Know-how team why this profile needs review.</p></div>
+                <label>Reason</label>
+                <select value={reportDraft.reason} onChange={(event) => setReportDraft({ ...reportDraft, reason: event.target.value })}>
+                  <option>Spam or scam</option>
+                  <option>Fake profile</option>
+                  <option>Harassment</option>
+                  <option>Unsafe teaching content</option>
+                  <option>Other</option>
+                </select>
+                <label>Details</label>
+                <textarea value={reportDraft.details} onChange={(event) => setReportDraft({ ...reportDraft, details: event.target.value })} placeholder="Write the report information here..." />
+                <div className="modal-actions"><button className="ghost" type="button" onClick={() => setShowReportForm(false)}>Cancel</button><button className="danger" type="button" onClick={() => submitReport(person)}>Submit Report Info</button></div>
+              </div>
+            )}
+            {profileActionNotice && <div className="notice compact-notice">{profileActionNotice}</div>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section>
+      <PageHeader title="Search" subtitle="Use the top navigation search box or refine the filters below." />
+      <div className="searchbar card social-searchbar">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people: name, username, Japanese, video editing, Yangon, English..." />
+        <select aria-label="What do you want to learn or teach?" value={category} onChange={(event) => setCategory(event.target.value)}>{searchCategories.map((item) => <option key={item}>{item}</option>)}</select>
+        <select aria-label="Level" value={level} onChange={(event) => setLevel(event.target.value)}>{searchLevels.map((item) => <option key={item}>{item}</option>)}</select>
+        <select aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value)}>{languages.map((item) => <option key={item}>{item}</option>)}</select>
+      </div>
+      <div className="pill-wrap left interest-strip">
+        {(user.interests || []).map((interest) => <button key={interest} className="ghost" onClick={() => setQuery(interest)}>{interest}</button>)}
+      </div>
+
+      <div className="facebook-search-layout single-column-search-layout">
+        <div className="card people-results-card full-width-results-card">
+          <div className="section-title"><h3>{hasSearch ? 'People Results' : 'Suggested People'}</h3><span className="pill muted">{accountResults.length} account(s)</span></div>
+          <div className="social-people-list">
+            {accountResults.length === 0 && <p className="muted-text">No profile found yet. Try searching a name, username, language, region, interest, or skill.</p>}
+            {accountResults.map((person) => (
+              <div className={`social-person-row ${selectedPerson?.id === person.id ? 'selected' : ''}`} key={person.id} onClick={() => { setProfileActionNotice(''); setShowReportForm(false); setSelected({ type: 'person', person }); }}>
+                <Avatar text={person.avatar || getInitials(person.fullName)} />
+                <div className="social-person-main">
+                  <strong>{person.fullName}</strong>
+                  <span>@{person.username} • {person.region || 'Region hidden'} • {(person.languages || []).join(', ') || 'No language yet'}</span>
+                  <p>{person.bio}</p>
+                  <div className="certificate-line">🎓 {getPersonCertificateSummary(person)}</div>
+                  <div className="teacher-rate-line">💳 {getTeacherRateInfo(person, query).label} • Seats: {getTeacherSeatInfo(person, sessions).available}/{getTeacherSeatInfo(person, sessions).limit} available</div>
+                  <div className="pill-wrap left">{(person.interests || []).slice(0, 4).map((interest) => <span className="pill muted" key={interest}>{interest}</span>)}</div>
+                </div>
+                <div className="social-person-actions">
+                  <button className="primary" type="button" onClick={(event) => { event.stopPropagation(); setProfileActionNotice(''); setShowReportForm(false); setSelected({ type: 'person', person }); }}>View Profile</button>
+                  {!person.isCurrentUser && <button className="ghost" type="button" onClick={(event) => { event.stopPropagation(); startMessage(person); }}>Message</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card community-search-strip">
+        <div className="section-title"><h3>Related Community Posts</h3><span className="pill muted">{communityResults.length}</span></div>
+        <div className="list">
+          {communityResults.length === 0 && <p className="muted-text">No related community content.</p>}
+          {communityResults.map((post) => <div className="message selectable" key={post.id}><small>r/{post.community}</small><strong>{post.title}</strong><p>{post.body}</p></div>)}
+        </div>
+      </div>
+      {selectedPerson && renderProfileModal(selectedPerson)}
+    </section>
+  );
+}
+
+function FriendPage({ user, people, setPage, setNavSearchQuery }) {
+  const defaultIncoming = people.slice(0, 2).map((person) => person.id);
+  const [friends, setFriends] = useState(() => loadState('knowhow-friends', []));
+  const [incomingRequests, setIncomingRequests] = useState(() => loadState('knowhow-friend-requests', defaultIncoming));
+  const [outgoingRequests, setOutgoingRequests] = useState(() => loadState('knowhow-friend-outgoing', []));
+  const [friendSearch, setFriendSearch] = useState('');
+  const [friendNotice, setFriendNotice] = useState('');
+
+  function saveFriends(next) {
+    setFriends(next);
+    localStorage.setItem('knowhow-friends', JSON.stringify(next));
+  }
+
+  function saveIncoming(next) {
+    setIncomingRequests(next);
+    localStorage.setItem('knowhow-friend-requests', JSON.stringify(next));
+  }
+
+  function saveOutgoing(next) {
+    setOutgoingRequests(next);
+    localStorage.setItem('knowhow-friend-outgoing', JSON.stringify(next));
+  }
+
+  function acceptRequest(person) {
+    const nextFriends = Array.from(new Set([...friends, person.id]));
+    saveFriends(nextFriends);
+    saveIncoming(incomingRequests.filter((id) => id !== person.id));
+    setFriendNotice(`${person.fullName} accepted as a friend.`);
+  }
+
+  function declineRequest(person) {
+    saveIncoming(incomingRequests.filter((id) => id !== person.id));
+    setFriendNotice(`${person.fullName} request removed.`);
+  }
+
+  function requestFriend(person) {
+    if (friends.includes(person.id)) {
+      setFriendNotice(`${person.fullName} is already your friend.`);
+      return;
+    }
+    if (outgoingRequests.includes(person.id)) {
+      setFriendNotice(`Friend request to ${person.fullName} is already pending.`);
+      return;
+    }
+    saveOutgoing([...outgoingRequests, person.id]);
+    setFriendNotice(`Friend request sent to ${person.fullName}.`);
+  }
+
+  function openSearch(person) {
+    setNavSearchQuery(person.username || person.fullName);
+    setPage('search');
+  }
+
+  const query = normalizeText(friendSearch);
+  const filterPeople = (list) => list.filter((person) => !query || normalizeText([person.fullName, person.username, person.bio, person.region, ...(person.interests || [])].join(' ')).includes(query));
+  const friendPeople = filterPeople(people.filter((person) => friends.includes(person.id)));
+  const incomingPeople = filterPeople(people.filter((person) => incomingRequests.includes(person.id) && !friends.includes(person.id)));
+  const outgoingPeople = filterPeople(people.filter((person) => outgoingRequests.includes(person.id) && !friends.includes(person.id)));
+  const suggestedPeople = filterPeople(people.filter((person) => !friends.includes(person.id) && !incomingRequests.includes(person.id) && !outgoingRequests.includes(person.id))).slice(0, 6);
+
+  function FriendCard({ person, action }) {
+    return (
+      <article className="friend-card card">
+        <div className="profile-head no-margin">
+          <Avatar text={person.avatar || getInitials(person.fullName)} />
+          <div><h3>{person.fullName}</h3><p>@{person.username} • {person.region || 'Region hidden'}</p></div>
+        </div>
+        <p>{person.bio}</p>
+        <div className="pill-wrap left">{(person.interests || []).slice(0, 3).map((interest) => <span className="pill muted" key={interest}>{interest}</span>)}</div>
+        <div className="friend-actions">
+          {action === 'incoming' && <><button className="primary" type="button" onClick={() => acceptRequest(person)}>Accept</button><button className="ghost" type="button" onClick={() => declineRequest(person)}>Decline</button></>}
+          {action === 'suggested' && <button className="primary" type="button" onClick={() => requestFriend(person)}>Add Friend</button>}
+          {action === 'outgoing' && <button className="ghost" type="button" disabled>Requested</button>}
+          {action === 'friend' && <button className="ghost" type="button" onClick={() => openSearch(person)}>View Profile</button>}
+          <button className="ghost" type="button" onClick={() => openSearch(person)}>Profile</button>
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <section className="friends-page">
+      <PageHeader title="Friends" subtitle="Accept friend requests, track sent requests, and discover suggested friends." />
+      <div className="card friend-search-card"><span aria-hidden="true">⌕</span><input value={friendSearch} onChange={(event) => setFriendSearch(event.target.value)} placeholder="Search friends or suggested people..." /></div>
+      {friendNotice && <div className="notice compact-notice">{friendNotice}</div>}
+
+      <div className="friend-section-grid">
+        <section className="friend-column">
+          <div className="section-title"><h3>Friend Requests</h3><span className="pill muted">{incomingPeople.length}</span></div>
+          <div className="friend-list">{incomingPeople.length ? incomingPeople.map((person) => <FriendCard key={person.id} person={person} action="incoming" />) : <div className="card"><p className="muted-text">No pending friend requests.</p></div>}</div>
+        </section>
+        <section className="friend-column">
+          <div className="section-title"><h3>My Friends</h3><span className="pill muted">{friendPeople.length}</span></div>
+          <div className="friend-list">{friendPeople.length ? friendPeople.map((person) => <FriendCard key={person.id} person={person} action="friend" />) : <div className="card"><p className="muted-text">Accepted friends will appear here.</p></div>}</div>
+        </section>
+      </div>
+
+      <div className="friend-section-grid">
+        <section className="friend-column">
+          <div className="section-title"><h3>Suggested Friends</h3><span className="pill muted">{suggestedPeople.length}</span></div>
+          <div className="friend-list">{suggestedPeople.length ? suggestedPeople.map((person) => <FriendCard key={person.id} person={person} action="suggested" />) : <div className="card"><p className="muted-text">No new suggestions right now.</p></div>}</div>
+        </section>
+        <section className="friend-column">
+          <div className="section-title"><h3>Sent Requests</h3><span className="pill muted">{outgoingPeople.length}</span></div>
+          <div className="friend-list">{outgoingPeople.length ? outgoingPeople.map((person) => <FriendCard key={person.id} person={person} action="outgoing" />) : <div className="card"><p className="muted-text">No sent requests.</p></div>}</div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+
+
+function WalletPage({ user, setUser, transactions, setTransactions }) {
+  const [loanAmount, setLoanAmount] = useState(2);
+  const [loanDays, setLoanDays] = useState(14);
+  const [walletNotice, setWalletNotice] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('All');
+  const [paymentProduct, setPaymentProduct] = useState(null);
+  const [paymentDraft, setPaymentDraft] = useState({ name: '', cardNumber: '', expiry: '', cvv: '' });
+  const [paymentError, setPaymentError] = useState('');
+  const wallet = normalizeWallet(user.wallet);
+  const income = transactions.filter((item) => item.amount > 0 && item.type !== 'Loan' && item.type !== 'Purchase').reduce((sum, item) => sum + item.amount, 0);
+  const spending = Math.abs(transactions.filter((item) => item.amount < 0).reduce((sum, item) => sum + item.amount, 0));
+  const outstandingLoan = wallet.loanOutstanding || 0;
+  const remainingLoanLimit = Math.max(0, Number((LOAN_POLICY.maxOutstanding - outstandingLoan).toFixed(2)));
+  const historyTypes = ['All', ...Array.from(new Set(transactions.map((item) => item.type)))];
+  const filteredTransactions = historyFilter === 'All' ? transactions : transactions.filter((item) => item.type === historyFilter);
+
+  function addTransaction(type, title, amount, nextUser) {
+    const nextTransaction = { id: crypto.randomUUID(), type, title, amount, date: new Date().toISOString().slice(0, 10) };
+    setUser(nextUser);
+    setTransactions([nextTransaction, ...transactions], nextUser);
+  }
+
+  function requestLoan() {
+    setWalletNotice('');
+    const amount = Number(loanAmount);
+    const days = Number(loanDays);
+    if (!amount || amount < LOAN_POLICY.min) {
+      setWalletNotice(`Minimum loan is ${LOAN_POLICY.min} credit.`);
+      return;
+    }
+    if (amount > LOAN_POLICY.maxSingleLoan) {
+      setWalletNotice(`Single loan limit is ${LOAN_POLICY.maxSingleLoan} credits.`);
+      return;
+    }
+    if (amount > remainingLoanLimit) {
+      setWalletNotice(`Loan denied. Your remaining loan limit is ${remainingLoanLimit} credits.`);
+      return;
+    }
+    if (!days || days < LOAN_POLICY.minDays || days > LOAN_POLICY.maxDays) {
+      setWalletNotice(`Return period must be ${LOAN_POLICY.minDays}-${LOAN_POLICY.maxDays} days.`);
+      return;
+    }
+    const dueDate = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+    const nextUser = {
+      ...user,
+      wallet: normalizeWallet({
+        ...wallet,
+        current: Number((wallet.current + amount).toFixed(2)),
+        loanOutstanding: Number((outstandingLoan + amount).toFixed(2)),
+        loanDueDate: dueDate,
+      }),
+    };
+    addTransaction('Loan', `Credit loan due ${dueDate}`, amount, nextUser);
+    setWalletNotice(`Loan approved: ${amount} credits. Due date: ${dueDate}.`);
+  }
+
+  function repayLoan() {
+    setWalletNotice('');
+    if (outstandingLoan <= 0) {
+      setWalletNotice('No active loan to repay.');
+      return;
+    }
+    const amount = Math.min(outstandingLoan, wallet.current);
+    if (amount <= 0) {
+      setWalletNotice('You need available credits before repaying the loan.');
+      return;
+    }
+    const nextOutstanding = Number((outstandingLoan - amount).toFixed(2));
+    const nextUser = {
+      ...user,
+      wallet: normalizeWallet({
+        ...wallet,
+        current: Number((wallet.current - amount).toFixed(2)),
+        loanOutstanding: nextOutstanding,
+        loanDueDate: nextOutstanding > 0 ? wallet.loanDueDate : '',
+      }),
+    };
+    addTransaction('Loan Repayment', 'Returned borrowed credits', -amount, nextUser);
+    setWalletNotice(nextOutstanding > 0 ? `Partial repayment complete. Remaining loan: ${nextOutstanding} credits.` : 'Loan fully repaid.');
+  }
+
+  function openPayment(product) {
+    setWalletNotice('');
+    setPaymentError('');
+    setPaymentProduct(product);
+  }
+
+  function closePayment() {
+    setPaymentProduct(null);
+    setPaymentError('');
+  }
+
+  function validatePayment() {
+    const cardNumber = paymentDraft.cardNumber.replace(/\D/g, '');
+    const expiry = paymentDraft.expiry.trim();
+    const cvv = paymentDraft.cvv.trim();
+    if (!paymentDraft.name.trim() || !cardNumber || !expiry || !cvv) {
+      return 'Fill all credit card fields before buying.';
+    }
+    if (cardNumber.length < 12 || cardNumber.length > 19) {
+      return 'Card number must be 12-19 digits.';
+    }
+    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) {
+      return 'Expiry must use MM/YY format.';
+    }
+    if (!/^\d{3,4}$/.test(cvv)) {
+      return 'CVV must be 3 or 4 digits.';
+    }
+    return '';
+  }
+
+  function completePayment(event) {
+    event.preventDefault();
+    if (!paymentProduct) return;
+    const validationError = validatePayment();
+    if (validationError) {
+      setPaymentError(validationError);
+      return;
+    }
+    const lastFour = paymentDraft.cardNumber.replace(/\D/g, '').slice(-4);
+    purchase(paymentProduct, lastFour);
+    setPaymentProduct(null);
+    setPaymentDraft({ name: '', cardNumber: '', expiry: '', cvv: '' });
+    setPaymentError('');
+  }
+
+  function purchase(product, cardLastFour = '') {
+    setWalletNotice('');
+    const nextWallet = product.productType === 'lecture_video'
+      ? normalizeWallet({ ...wallet, lectureAccess: (wallet.lectureAccess || 0) + 1 })
+      : normalizeWallet({
+          ...wallet,
+          current: Number((wallet.current + product.credits).toFixed(2)),
+          purchased: Number(((wallet.purchased || 0) + product.credits).toFixed(2)),
+        });
+    const nextUser = { ...user, wallet: nextWallet };
+    addTransaction('Purchase', product.title, product.productType === 'lecture_video' ? 0 : product.credits, nextUser);
+    const paidWith = cardLastFour ? ` Card ending ${cardLastFour} accepted.` : '';
+    setWalletNotice(product.productType === 'lecture_video' ? `Lecture video access added. Credit balance was not changed.${paidWith}` : `${product.credits} credits purchased successfully.${paidWith}`);
+  }
+
+  return (
+    <section>
+      <PageHeader title="Credit Wallet, Loans & Purchases" subtitle="Track earned credits, spent credits, borrowed credits, repayments, credit point purchases, and lecture video purchases." />
+      <div className="stats-grid">
+        <StatCard label="Current Credits" value={wallet.current} hint="Ready to spend" />
+        <StatCard label="Earned Credits" value={wallet.earned} hint={`${income.toFixed(2)} from teaching history`} />
+        <StatCard label="Spent Credits" value={wallet.spent} hint={`${spending.toFixed(2)} spent / repaid`} />
+        <StatCard label="Loan Balance" value={outstandingLoan} hint={wallet.loanDueDate ? `Due ${wallet.loanDueDate}` : 'No active loan'} />
+      </div>
+      {walletNotice && <div className="notice">{walletNotice}</div>}
+      <div className="two-col">
+        <div className="card">
+          <h3>Loan Credit</h3>
+          <p className="muted-text">Loan limit: max {LOAN_POLICY.maxSingleLoan} credits per request and max {LOAN_POLICY.maxOutstanding} credits outstanding. Return period must be {LOAN_POLICY.minDays}-{LOAN_POLICY.maxDays} days.</p>
+          <div className="form-grid two">
+            <div><label>Amount</label><input type="number" min={LOAN_POLICY.min} max={Math.min(LOAN_POLICY.maxSingleLoan, remainingLoanLimit)} step="0.5" value={loanAmount} onChange={(event) => setLoanAmount(event.target.value)} /></div>
+            <div><label>Return in days</label><input type="number" min={LOAN_POLICY.minDays} max={LOAN_POLICY.maxDays} value={loanDays} onChange={(event) => setLoanDays(event.target.value)} /></div>
+          </div>
+          <div className="summary-box"><strong>Remaining loan limit:</strong> {remainingLoanLimit} credits</div>
+          <div className="actions wrap">
+            <button className="primary" onClick={requestLoan} disabled={remainingLoanLimit <= 0}>Request Loan</button>
+            <button className="ghost" onClick={repayLoan} disabled={outstandingLoan <= 0}>Repay Loan</button>
+          </div>
+        </div>
+        <div className="card">
+          <h3>Purchase Options</h3>
+          <div className="list">
+            {CREDIT_PRODUCTS.map((product) => (
+              <div className="skill-row" key={product.id}>
+                <div><strong>{product.title}</strong><span>{product.price} • {product.credits ? `${product.credits} credits` : 'lecture video access'}</span></div>
+                <button className="primary" type="button" onClick={() => openPayment(product)}>Buy</button>
+              </div>
+            ))}
+          </div>
+          <div className="summary-box"><strong>Lecture video access:</strong> {wallet.lectureAccess || 0}</div>
+        </div>
+      </div>
+      <div className="card credit-history-card">
+        <div className="section-title">
+          <h3>Credit History</h3>
+          <label className="history-filter-label">
+            <span>Type</span>
+            <select value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value)}>
+              {historyTypes.map((type) => <option key={type}>{type}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="list">
+          {filteredTransactions.length === 0 && <p className="muted-text">No credit history for this type.</p>}
+          {filteredTransactions.map((item) => <TransactionItem key={item.id} item={item} />)}
+        </div>
+      </div>
+      {paymentProduct && (
+        <div className="modal-backdrop high-modal-backdrop">
+          <form className="modal card payment-modal" onSubmit={completePayment}>
+            <div className="section-title">
+              <h2>Payment Information</h2>
+              <button className="icon" type="button" onClick={closePayment}>x</button>
+            </div>
+            <div className="summary-box">
+              <strong>{paymentProduct.title}</strong>
+              <span>{paymentProduct.price} - {paymentProduct.credits ? `${paymentProduct.credits} credits` : 'lecture video access'}</span>
+            </div>
+            <label>Name on Card</label>
+            <input value={paymentDraft.name} onChange={(event) => setPaymentDraft({ ...paymentDraft, name: event.target.value })} placeholder="Cardholder name" autoComplete="cc-name" required />
+            <label>Card Number</label>
+            <input value={paymentDraft.cardNumber} onChange={(event) => setPaymentDraft({ ...paymentDraft, cardNumber: event.target.value.replace(/[^\d ]/g, '').slice(0, 23) })} placeholder="1234 5678 9012 3456" inputMode="numeric" autoComplete="cc-number" required />
+            <div className="form-grid two">
+              <div><label>Expiry</label><input value={paymentDraft.expiry} onChange={(event) => setPaymentDraft({ ...paymentDraft, expiry: event.target.value.replace(/[^\d/]/g, '').slice(0, 5) })} placeholder="MM/YY" autoComplete="cc-exp" required /></div>
+              <div><label>CVV</label><input value={paymentDraft.cvv} onChange={(event) => setPaymentDraft({ ...paymentDraft, cvv: event.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="123" inputMode="numeric" autoComplete="cc-csc" required /></div>
+            </div>
+            {paymentError && <p className="error-text">{paymentError}</p>}
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={closePayment}>Cancel</button>
+              <button className="primary" type="submit">Confirm Payment</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SessionsPage({ user, setUser, sessions, setSessions, transactions, setTransactions }) {
+  const [showDialog, setShowDialog] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState('');
+  const [activeMeeting, setActiveMeeting] = useState(null);
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [form, setForm] = useState({
+    role: 'teaching',
+    topic: 'English Speaking',
+    teacherName: 'May Thet Hnin',
+    date: '2026-06-30',
+    time: '18:30',
+    durationMinutes: 30,
+    studentLimit: 8,
+    notes: '',
+  });
+  const canTeach = canUserTeach(user);
+  const activeSessions = sessions.filter((session) => session.status !== 'Completed');
+  const normalizedSessionSearch = normalizeText(sessionSearch);
+  const visibleSessions = activeSessions
+    .filter((session) => !normalizedSessionSearch || normalizeText([session.teacher, session.topic, session.language, session.date, session.time].join(' ')).includes(normalizedSessionSearch))
+    .sort((a, b) => {
+      const aJoined = (a.joinedSeats || []).some((seat) => seat.userId === user.id || seat.userName === user.fullName);
+      const bJoined = (b.joinedSeats || []).some((seat) => seat.userId === user.id || seat.userName === user.fullName);
+      if (aJoined !== bJoined) return aJoined ? -1 : 1;
+      return `${a.date || ''} ${a.time || ''}`.localeCompare(`${b.date || ''} ${b.time || ''}`);
+    });
+  const completedCount = sessions.length - activeSessions.length;
+
+  async function createSession() {
+    setSessionNotice('');
+    if (!canTeach) {
+      setSessionNotice('Only approved teachers can create sessions. Learner accounts can only join assigned sessions. Apply for Teaching Authority from Profile first.');
+      setShowDialog(false);
+      return;
+    }
+    const durationMinutes = Number(form.durationMinutes);
+    const studentLimit = Math.max(1, Math.floor(Number(form.studentLimit) || 1));
+    const durationHours = Number((durationMinutes / 60).toFixed(2));
+    const creditAmount = minutesToCredits(durationMinutes);
+    if (!form.topic.trim()) {
+      setSessionNotice('Please enter a skill topic.');
+      return;
+    }
+    if (!durationMinutes || durationMinutes < 1) {
+      setSessionNotice('Session duration must be at least 1 minute.');
+      return;
+    }
+    if (!studentLimit || studentLimit < 1) {
+      setSessionNotice('Seats limit must be at least 1 learner.');
+      return;
+    }
+    const roomId = createSecureRoomId();
+    const meetingLink = buildMeetingUrl(roomId);
+    const meetingProvider = 'Know-how Room';
+    const meetingSpaceName = buildJitsiRoomName(roomId);
+
+    const session = {
+      id: crypto.randomUUID(),
+      topic: form.topic.trim(),
+      teacher: user.fullName,
+      learner: 'Learner pending',
+      date: form.date,
+      time: form.time,
+      duration: durationHours,
+      durationMinutes,
+      credits: creditAmount,
+      creditRatePerMinute: CREDIT_PER_MINUTE,
+      studentLimit,
+      seatsAvailable: studentLimit,
+      teacherLevel: user.teacherLevel || user.role || 'Approved Teacher',
+      status: 'Pending',
+      roomId,
+      meetingLink,
+      meetingProvider,
+      meetingSpaceName,
+      attendance: [],
+      mentorJoinedAt: '',
+      mentorLeftAt: '',
+      learnerJoinedAt: '',
+      learnerLeftAt: '',
+      actualDurationMinutes: 0,
+      verifiedDurationMinutes: 0,
+      attendanceVerified: false,
+      notes: form.notes || 'Created by approved teacher. Learner will be assigned through booking, message schedule, or admin flow.',
+      createdByRole: 'teaching',
+      creatorOnly: 'teacher',
+    };
+    setSessions([session, ...sessions]);
+    setShowDialog(false);
+    setSessionNotice(`Teaching session created. Learners can only join after they are assigned. Credits: ${formatCredits(creditAmount)} using the standard time table (${getCreditTableLabel(durationMinutes)}).`);
+  }
+
+  function updateStatus(id, status) {
+    setSessionNotice('');
+    setSessions(sessions.map((session) => {
+      if (session.id !== id) return session;
+      const withRoom = ['Accepted', 'Rescheduled'].includes(status) ? ensureStoredSessionRoom(session) : session;
+      return { ...withRoom, status };
+    }));
+  }
+
+  function updateSessionAttendance(sessionId, updater) {
+    let updatedSession = null;
+    const nextSessions = sessions.map((session) => {
+      if (session.id !== sessionId) return session;
+      updatedSession = updater(session);
+      return updatedSession;
+    });
+    setSessions(nextSessions);
+    return updatedSession;
+  }
+
+  function joinSeat(session) {
+    setSessionNotice('');
+    const seatLimit = Number(session.studentLimit || 10);
+    const joinedSeats = session.joinedSeats || [];
+    const alreadyJoined = joinedSeats.some((seat) => seat.userId === user.id || seat.userName === user.fullName);
+    const availableSeats = Number(session.seatsAvailable ?? Math.max(0, seatLimit - joinedSeats.length));
+    if (alreadyJoined) {
+      setSessionNotice('You already joined this session seat. Your selected sessions appear at the top.');
+      return;
+    }
+    if (availableSeats <= 0 || joinedSeats.length >= seatLimit) {
+      setSessionNotice('This session is full.');
+      return;
+    }
+    const nextSessions = sessions.map((item) => {
+      if (item.id !== session.id) return item;
+      const nextJoinedSeats = [
+        ...(item.joinedSeats || []),
+        { id: crypto.randomUUID(), userId: user.id, userName: user.fullName, joinedAt: new Date().toISOString() },
+      ];
+      return {
+        ...item,
+        joinedSeats: nextJoinedSeats,
+        learner: item.learner && item.learner !== 'Learner pending' ? item.learner : user.fullName,
+        seatsAvailable: Math.max(0, Number(item.studentLimit || seatLimit) - nextJoinedSeats.length),
+        status: item.status === 'Pending' ? 'Accepted' : item.status,
+      };
+    });
+    setSessions(nextSessions);
+    setSessionNotice('Seat joined successfully. This session is now pinned at the top.');
+  }
+
+  function joinMeeting(session) {
+    setSessionNotice('');
+    const roomId = getSessionRoom(session);
+    if (!roomId) {
+      setSessionNotice('Meeting room ID is missing. Please contact admin; a session must have a stored room ID before joining.');
+      return;
+    }
+    const role = getParticipantRole(session, user);
+    if (!role) {
+      setSessionNotice('Only the mentor or learner assigned to this session can join this room.');
+      return;
+    }
+    const updated = updateSessionAttendance(session.id, (current) => {
+      const attendance = current.attendance || [];
+      const alreadyOpen = attendance.some((item) => item.userName === user.fullName && !item.leftAt);
+      const nextAttendance = alreadyOpen ? attendance : [
+        ...attendance,
+        { id: crypto.randomUUID(), userName: user.fullName, role, joinedAt: new Date().toISOString(), leftAt: '', durationMinutes: 0 },
+      ];
+      return {
+        ...current,
+        status: current.status === 'Completed' ? current.status : 'Ongoing',
+        roomId,
+        meetingLink: current.meetingLink || buildMeetingUrl(roomId),
+        meetingProvider: current.meetingProvider || 'Know-how Room',
+        meetingSpaceName: current.meetingSpaceName || buildJitsiRoomName(roomId),
+        attendance: nextAttendance,
+        ...sessionAttendanceFields(nextAttendance, new Date().toISOString()),
+      };
+    });
+    setActiveMeeting(updated);
+    if (isExternalMeetingLink(updated?.meetingLink)) {
+      window.open(updated.meetingLink, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  function leaveMeeting() {
+    if (!activeMeeting) return;
+    const updated = updateSessionAttendance(activeMeeting.id, (current) => {
+      const now = new Date().toISOString();
+      const attendance = (current.attendance || []).map((item) => {
+        if (item.userName === user.fullName && !item.leftAt) {
+          const minutes = Number(((new Date(now).getTime() - new Date(item.joinedAt).getTime()) / 60000).toFixed(2));
+          return { ...item, leftAt: now, durationMinutes: Math.max(0, minutes) };
+        }
+        return item;
+      });
+      return { ...current, attendance, ...sessionAttendanceFields(attendance, now) };
+    });
+    setActiveMeeting(null);
+    setSessionNotice(`Meeting left. Verified overlap so far: ${updated?.verifiedDurationMinutes || 0} minute(s).`);
+  }
+
+  function completeSession(session) {
+    setSessionNotice('');
+    if (session.status === 'Completed') {
+      setSessionNotice('This session is already completed.');
+      return;
+    }
+    if (session.status === 'Cancelled') {
+      setSessionNotice('Cancelled sessions cannot be completed.');
+      return;
+    }
+    const isTeacher = session.teacher === user.fullName;
+    const currentWallet = normalizeWallet(user.wallet);
+    const attendanceFields = sessionAttendanceFields(session.attendance || [], new Date().toISOString());
+    const sessionForBilling = { ...session, ...attendanceFields };
+    const billableMinutes = getBillableMinutes(sessionForBilling);
+    const billableCredits = getBillableCredits(sessionForBilling);
+    if (!isTeacher && currentWallet.current < billableCredits) {
+      setSessionNotice(`Not enough credits to complete this learning session. Required: ${formatCredits(billableCredits)} credits for ${billableMinutes} minute(s).`);
+      return;
+    }
+    const amount = isTeacher ? billableCredits : -billableCredits;
+    const nextWallet = normalizeWallet({
+      ...currentWallet,
+      current: Number((currentWallet.current + amount).toFixed(2)),
+      earned: isTeacher ? Number((currentWallet.earned + billableCredits).toFixed(2)) : currentWallet.earned,
+      spent: !isTeacher ? Number((currentWallet.spent + billableCredits).toFixed(2)) : currentWallet.spent,
+    });
+    const nextUser = {
+      ...user,
+      wallet: nextWallet,
+      xp: user.xp + 45,
+      badges: user.badges.includes('10 Hours Taught') && isTeacher ? user.badges : isTeacher ? [...user.badges, '10 Hours Taught'] : user.badges,
+    };
+    const nextTransaction = {
+      id: crypto.randomUUID(),
+      type: isTeacher ? 'Earned' : 'Spent',
+      title: `${isTeacher ? 'Teaching' : 'Learning'} ${session.topic} • ${billableMinutes} min verified • ${formatCredits(billableCredits)} credits`,
+      amount,
+      date: new Date().toISOString().slice(0, 10),
+    };
+    const nextSessions = sessions.map((item) => item.id === session.id ? {
+      ...item,
+      status: 'Completed',
+      completedAt: new Date().toISOString(),
+      ...sessionAttendanceFields(item.attendance || [], new Date().toISOString()),
+      creditsCharged: billableCredits,
+      billableMinutes,
+      summary: generateSummary({ ...item, billableMinutes, creditsCharged: billableCredits }),
+    } : item);
+    setUser(nextUser);
+    setSessions(nextSessions);
+    setTransactions([nextTransaction, ...transactions], nextUser);
+    setSessionNotice(`Session completed. ${formatCredits(billableCredits)} credit(s) were calculated from ${billableMinutes} minute(s) using the standard time table, and the completed session was moved out of the active list.`);
+  }
+
+  return (
+    <section>
+      <PageHeader title="Sessions" subtitle="Search sessions by teacher or topic, then join a seat before it becomes full." action={canTeach ? <button className="primary" onClick={() => { setSessionNotice(''); setShowDialog(true); }}>Create Teaching Session</button> : <span className="status pending">Join seat mode</span>} />
+      <div className="card sessions-search-card">
+        <label className="sessions-search-box"><span>⌕</span><input value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value)} placeholder="Search by teacher name or topic..." /></label>
+        <span className="pill muted">{visibleSessions.length}/{activeSessions.length} session(s)</span>
+      </div>
+      {sessionNotice && <div className="notice">{sessionNotice}</div>}
+      {completedCount > 0 && <div className="summary-box"><strong>{completedCount} completed session(s)</strong> are hidden from this active list.</div>}
+      <div className="sessions-grid">
+        {visibleSessions.length === 0 && <div className="card"><p className="muted-text">No matching active sessions. Try another teacher name or topic.</p></div>}
+        {visibleSessions.map((session) => {
+          const role = getParticipantRole(session, user);
+          const scheduledMinutes = getScheduledMinutes(session);
+          const creditValue = session.credits ?? getBillableCredits(session);
+          const seatLimit = Number(session.studentLimit || 10);
+          const joinedSeats = session.joinedSeats || [];
+          const availableSeats = Number(session.seatsAvailable ?? Math.max(0, seatLimit - joinedSeats.length));
+          const usedSeats = Math.max(0, seatLimit - availableSeats);
+          const alreadyJoined = joinedSeats.some((seat) => seat.userId === user.id || seat.userName === user.fullName);
+          const isFull = availableSeats <= 0 || usedSeats >= seatLimit;
+          const teacherLevelLabel = session.teacherLevel || 'Intermediate';
+          const teacherRating = session.teacherRating || '4.8';
+          const teacherLevelNumber = session.teacherLevelNumber || 'Lv.15';
+          const sessionLanguage = session.language || user.languages?.[0] || 'English';
+          return (
+            <div className={`card session-card session-compact-card ${alreadyJoined ? 'joined-session-card' : ''}`} key={session.id}>
+              <div className="session-compact-head">
+                <div className="session-teacher-line"><span>📊</span><strong>{session.teacher || session.topic}</strong></div>
+                <StatusBadge status={alreadyJoined ? 'Seat Joined' : session.status} />
+              </div>
+              <div className="session-rating-line">⭐️ {teacherRating} • 🟡 {teacherLevelLabel} • {teacherLevelNumber}</div>
+              <div className="session-info-lines">
+                <span>📚 {session.topic}</span>
+                <span>🌐 {sessionLanguage}</span>
+                <span>📅 {session.date || 'Date TBA'} • {session.time || 'Time TBA'}</span>
+                <span>⏱️ {scheduledMinutes} mins</span>
+                <span>💳 {formatCredits(creditValue)} Credits</span>
+                <span>👥 {usedSeats}/{seatLimit} Seats</span>
+              </div>
+              {session.summary && <div className="summary-box compact-session-summary"><strong>AI Summary:</strong><p>{session.summary}</p></div>}
+              <div className="session-card-actions">
+                <button className="primary" onClick={() => joinSeat(session)} disabled={alreadyJoined || isFull}>{alreadyJoined ? 'Seat Joined' : isFull ? 'Full' : 'Join Seat'}</button>
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Accepted')}>Accept</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Rescheduled')}>Reschedule</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Cancelled')}>Cancel</button>}
+                {canTeach && role === 'mentor' && <button className="primary" onClick={() => completeSession(session)} disabled={session.status === 'Cancelled'}>Complete</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {showDialog && (
+        <div className="modal-backdrop">
+          <div className="modal card">
+            <div className="section-title">
+              <h2>New Session</h2>
+              <button className="icon" onClick={() => setShowDialog(false)}>×</button>
+            </div>
+            {sessionNotice && <p className="error-text">{sessionNotice}</p>}
+            <label>Skill Topic</label>
+            <input value={form.topic} onChange={(event) => setForm({ ...form, topic: event.target.value })} disabled={!canTeach} />
+            <div className="form-grid">
+              <div><label>Date</label><input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} disabled={!canTeach} /></div>
+              <div><label>Time</label><input type="time" value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} disabled={!canTeach} /></div>
+              <div><label>Duration (minutes)</label><input type="number" step="1" min="1" value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} disabled={!canTeach} /></div>
+              <div><label>Seats limit</label><input type="number" step="1" min="1" value={form.studentLimit} onChange={(event) => setForm({ ...form, studentLimit: event.target.value })} disabled={!canTeach} /></div>
+            </div>
+            <label>Notes</label>
+            <textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Session goals, files, preparation notes..." disabled={!canTeach} />
+            <TeacherBookingPreview form={form} sessions={sessions} user={user} />
+            <button className="primary full" onClick={createSession} disabled={!canTeach}>Create Teaching Session</button>
+          </div>
+        </div>
+      )}
+
+      {activeMeeting && (
+        <div className="modal-backdrop">
+          <div className="modal card meeting-room">
+            <div className="section-title">
+              <h2>Know-how Meeting Room</h2>
+              <StatusBadge status="Ongoing" />
+            </div>
+            <div className="call-box video-call-box">
+              <div className="video-call-header">
+                <div><h3>{activeMeeting.topic}</h3><p>Room: {buildJitsiRoomName(getSessionRoom(activeMeeting))}</p></div>
+                <a className="primary small-link" href={activeMeeting.meetingLink || buildMeetingUrl(getSessionRoom(activeMeeting))} target="_blank" rel="noreferrer">Open call tab</a>
+              </div>
+              <iframe
+                className="jitsi-frame"
+                title={`Session room ${getSessionRoom(activeMeeting)}`}
+                src={activeMeeting.meetingLink || buildMeetingUrl(getSessionRoom(activeMeeting))}
+                allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+              />
+            </div>
+            <p className="muted-text">You joined as {getParticipantRole(activeMeeting, user)}. Both devices must use this same saved meeting link. Screen share is available inside the call toolbar.</p>
+            <LiveAttendanceSummary activeMeeting={activeMeeting} />
+            <button className="danger full" onClick={leaveMeeting}>Leave Meeting</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+
+
+function TeacherBookingPreview({ form, sessions, user }) {
+  const durationMinutes = Math.max(1, Number(form.durationMinutes) || 0);
+  const selectedTeacher = null;
+  const rateInfo = { rate: CREDIT_PER_MINUTE, label: 'Teacher-created session • standard time credit pricing', level: user.teacherLevel || user.role || 'Approved Teacher' };
+  const seatInfo = null;
+  const credits = minutesToCredits(durationMinutes);
+  return (
+    <div className="notice booking-preview">
+      <strong>Credit preview:</strong> {getCreditTableLabel(durationMinutes)}. Your balance: {formatCredits(normalizeWallet(user.wallet).current)} credits.
+      <span>{rateInfo.label}. Credit is calculated from verified session time: 60 minutes = 1 credit.</span>
+      {seatInfo && <span className={seatInfo.full ? 'seat-full' : 'seat-open'}>{seatInfo.full ? `This teacher is full: 0/${seatInfo.limit} seats available.` : `Teacher seats available: ${seatInfo.available}/${seatInfo.limit}.`}</span>}
+      <div className="credit-price-strip">
+        {CREDIT_PRICE_TABLE.map((item) => <span key={item.minutes}>{item.minutes}m = {formatCredits(item.credits)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function LiveAttendanceSummary({ activeMeeting }) {
+  const [tick, setTick] = useState(Date.now());
+  useEffect(() => {
+    if (!activeMeeting) return undefined;
+    const timer = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeMeeting]);
+  const now = new Date(tick).toISOString();
+  const liveFields = sessionAttendanceFields(activeMeeting?.attendance || [], now);
+  const liveCredits = minutesToCredits(liveFields.verifiedDurationMinutes || liveFields.actualDurationMinutes || 0);
+  return (
+    <div className="summary-box live-attendance-box">
+      <strong>Live attendance:</strong>
+      <span> Mentor joined: {liveFields.mentorJoinedAt || '—'} • Learner joined: {liveFields.learnerJoinedAt || '—'}</span>
+      <span> Actual: {liveFields.actualDurationMinutes} min • Verified overlap: {liveFields.verifiedDurationMinutes} min</span>
+      <span> Credit preview: {formatCredits(liveCredits)} credit(s) using verified time</span>
+    </div>
+  );
+}
+
+function MessagesPage({ messages, setMessages, sessions, setSessions, user, people, setPage }) {
+  const contactProfiles = useMemo(() => {
+    const map = new Map();
+    people.forEach((person) => map.set(person.fullName, person));
+    map.set(user.fullName, {
+      id: user.id,
+      fullName: user.fullName,
+      username: user.username,
+      avatar: user.avatar,
+      region: user.region,
+      languages: user.languages || [],
+      interests: user.interests || [],
+      bio: user.bio,
+    });
+    return map;
+  }, [people, user]);
+  const contacts = useMemo(() => {
+    const names = Array.from(new Set([
+      ...messages.map((message) => message.name),
+      ...sessions.flatMap((session) => [session.teacher, session.learner]).filter((name) => name && name !== user.fullName && !name.includes('auto-assigned')),
+      ...people.map((person) => person.fullName),
+    ])).filter(Boolean);
+    return names.length ? names : ['Community Inbox'];
+  }, [messages, sessions, user.fullName, people]);
+  const [activeContact, setActiveContact] = useState(() => localStorage.getItem('knowhow-open-chat') || contacts[0] || 'Community Inbox');
+  const [text, setText] = useState('');
+  const [contactSearch, setContactSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState('inbox');
+  const [messageSearch, setMessageSearch] = useState('');
+  const [composerMode, setComposerMode] = useState('message');
+  const [scheduleDraft, setScheduleDraft] = useState({
+    topic: 'English Speaking',
+    date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+    time: '18:30',
+    durationMinutes: 30,
+    notes: '',
+  });
+
+  useEffect(() => {
+    const intent = localStorage.getItem('knowhow-open-chat');
+    if (intent) {
+      setActiveContact(intent);
+      localStorage.removeItem('knowhow-open-chat');
+    }
+  }, []);
+
+  const filteredContacts = contacts.filter((contact) => {
+    const matchesSearch = normalizeText(contact).includes(normalizeText(contactSearch)) || normalizeText(contactProfiles.get(contact)?.username).includes(normalizeText(contactSearch));
+    const hasConversation = messages.some((message) => message.name === contact);
+    return matchesSearch && (activeFilter === 'people' || hasConversation);
+  });
+  const activeMessages = messages.filter((message) => message.name === activeContact && (!messageSearch.trim() || normalizeText([message.body, message.attachment?.name, message.attachment?.kind].join(' ')).includes(normalizeText(messageSearch))));
+  const activeProfile = contactProfiles.get(activeContact);
+  const relatedSessions = sessions.filter((session) => {
+    const peopleInSession = [session.teacher, session.learner];
+    if (activeContact === 'Community Inbox') return peopleInSession.includes(user.fullName);
+    return peopleInSession.includes(user.fullName) && peopleInSession.includes(activeContact);
+  });
+  const lastActiveSession = relatedSessions.find((session) => session.status !== 'Completed') || relatedSessions[0];
+  const canTeach = canUserTeach(user);
+
+  function sendMessage(customBody = '', attachment = null) {
+    const body = (customBody || text || (attachment ? attachmentLabel(attachment) : '')).trim();
+    if (!body && !attachment) return;
+    setMessages((current) => [...current, {
+      id: crypto.randomUUID(),
+      name: activeContact || 'Community Inbox',
+      username: activeProfile?.username || normalizeText(activeContact).replace(/\s+/g, ''),
+      type: composerMode === 'schedule' ? 'Schedule' : activeContact === 'Community Inbox' ? 'Community message' : 'Private message',
+      body: body || attachmentLabel(attachment),
+      attachment,
+      time: formatNowLabel(),
+      direction: 'outgoing',
+      unread: false,
+      delivered: true,
+    }]);
+    setText('');
+    setComposerMode('message');
+  }
+
+  async function sendMediaFiles(event) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!files.length || !activeContact) return;
+    const tooLarge = files.find((file) => file.size > 5 * 1024 * 1024);
+    if (tooLarge) {
+      sendMessage(`Attachment too large for local demo storage: ${tooLarge.name}. Please keep files under 5MB.`);
+      return;
+    }
+    const attachments = await Promise.all(files.map(async (file) => ({
+      name: file.name,
+      mime: file.type || 'application/octet-stream',
+      kind: file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file',
+      size: file.size,
+      url: await readFileAsDataUrl(file),
+    })));
+    const fileMessages = attachments.map((attachment) => ({
+      id: crypto.randomUUID(),
+      name: activeContact || 'Community Inbox',
+      username: activeProfile?.username || normalizeText(activeContact).replace(/\s+/g, ''),
+      type: activeContact === 'Community Inbox' ? 'Community message' : 'Private message',
+      body: attachmentLabel(attachment),
+      attachment,
+      time: formatNowLabel(),
+      direction: 'outgoing',
+      unread: false,
+      delivered: true,
+    }));
+    setMessages((current) => [...current, ...fileMessages]);
+  }
+
+  function sendSchedule(session) {
+    sendMessage(`Schedule shared: ${session.topic} on ${session.date} at ${session.time} • ${formatCredits(session.credits)} credits • Status: ${session.status}`);
+  }
+
+  function createScheduleFromMessage() {
+    if (!canTeach) {
+      sendMessage('Only approved teachers can create schedules. As a learner, you can join after a teacher creates and assigns a session.');
+      setComposerMode('message');
+      return;
+    }
+    if (!activeContact || activeContact === user.fullName || activeContact === 'Community Inbox') return;
+    const durationMinutes = Math.max(1, Number(scheduleDraft.durationMinutes) || 30);
+    const duration = Number((durationMinutes / 60).toFixed(2));
+    const credits = minutesToCredits(durationMinutes);
+    const roomId = createSecureRoomId();
+    const session = {
+      id: crypto.randomUUID(),
+      topic: scheduleDraft.topic.trim() || 'Learning Session',
+      teacher: user.fullName,
+      learner: activeContact,
+      date: scheduleDraft.date,
+      time: scheduleDraft.time,
+      duration,
+      durationMinutes,
+      credits,
+      status: 'Pending',
+      roomId,
+      meetingLink: buildMeetingUrl(roomId),
+      meetingProvider: 'Know-how Room',
+      meetingSpaceName: buildJitsiRoomName(roomId),
+      attendance: [],
+      mentorJoinedAt: '',
+      mentorLeftAt: '',
+      learnerJoinedAt: '',
+      learnerLeftAt: '',
+      actualDurationMinutes: 0,
+      verifiedDurationMinutes: 0,
+      attendanceVerified: false,
+      notes: scheduleDraft.notes || `Created by teacher from Messenger schedule with ${activeContact}`,
+      createdFrom: 'messages',
+      creatorOnly: 'teacher',
+    };
+    setSessions([session, ...sessions]);
+    sendMessage(`📅 Teaching schedule created: ${session.topic} on ${session.date} at ${session.time} • ${durationMinutes} min • ${formatCredits(session.credits)} credits. Learner can join when accepted/assigned.`);
+    setComposerMode('message');
+  }
+
+  function startCall() {
+    if (lastActiveSession) {
+      setPage('sessions');
+      return;
+    }
+    sendMessage(`Let's create a session and start a video call for ${activeContact}.`);
+    setPage('sessions');
+  }
+
+  function openContact(contact) {
+    setActiveContact(contact);
+    setMessages(messages.map((message) => message.name === contact ? { ...message, unread: false } : message));
+  }
+
+  return (
+    <section className="messages-page modern-messages-page messenger-flex-page">
+      <div className="messages-layout card messenger-flex-shell">
+        <aside className="messages-contact-panel">
+          <div className="messages-panel-head messenger-title-row simple-messenger-title-row">
+            <div><strong>Messenger</strong><span>{filteredContacts.length} conversation(s)</span></div>
+          </div>
+          <input className="compact-input messenger-search-input" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Search people or groups" />
+          <div className="chat-filter-row"><button type="button" className={activeFilter === 'inbox' ? 'active' : ''} onClick={() => setActiveFilter('inbox')}>Inbox</button><button type="button" className={activeFilter === 'people' ? 'active' : ''} onClick={() => setActiveFilter('people')}>People</button></div>
+          <div className="contact-scroll modern-contact-scroll">
+            {filteredContacts.length === 0 && <p className="muted-text empty-contacts">No conversations found.</p>}
+            {filteredContacts.map((contact) => {
+              const last = [...messages].reverse().find((message) => message.name === contact);
+              const profile = contactProfiles.get(contact);
+              const unreadCount = messages.filter((message) => message.name === contact && message.unread).length;
+              return (
+                <button key={contact} className={`messenger-contact modern-contact ${activeContact === contact ? 'active' : ''}`} onClick={() => openContact(contact)}>
+                  <span className="avatar-wrap"><Avatar text={profile?.avatar || getInitials(contact)} /><i /></span>
+                  <span className="contact-copy"><strong>{contact}</strong><small>{messagePreview(last)}</small></span>
+                  <span className="contact-side">{unreadCount > 0 ? <b className="unread-dot">{unreadCount}</b> : <small>{last?.time || ''}</small>}</span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <section className="messages-chat-panel">
+          <header className="messages-chat-header messenger-chat-title">
+            <div className="profile-head no-margin">
+              <Avatar text={activeProfile?.avatar || getInitials(activeContact)} />
+              <div><h3>{activeContact}</h3><p className="muted-text">{activeProfile ? `@${activeProfile.username} • ${activeProfile.region || 'Region hidden'}` : 'Community conversation'} • Active now</p></div>
+            </div>
+
+          </header>
+          {messageSearch !== '' && <div className="message-search-row"><input value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} autoFocus placeholder="Search in conversation..." /><button className="ghost" onClick={() => setMessageSearch('')}>Close</button></div>}
+
+          <div className="message-session-strip compact-message-session-strip">
+            {relatedSessions.length === 0 && <div className="schedule-chip"><strong>No session yet</strong><span>{canTeach ? 'Create a teacher schedule here, or open Sessions for advanced options.' : 'No session yet. Learners can join after a teacher creates a session.'}</span>{canTeach && <button className="ghost" onClick={() => setComposerMode('schedule')}>Create</button>}</div>}
+            {relatedSessions.slice(0, 3).map((session) => (
+              <div className="schedule-chip" key={session.id}>
+                <strong>{session.topic}</strong><span>{session.date} • {session.time} • {formatCredits(session.credits)} credits</span>
+                <button className="ghost" onClick={() => sendSchedule(session)}>Send</button>
+              </div>
+            ))}
+          </div>
+
+          {canTeach && composerMode === 'schedule' && (
+            <div className="schedule-builder modern-schedule-builder">
+              <div><label>Topic</label><input value={scheduleDraft.topic} onChange={(event) => setScheduleDraft({ ...scheduleDraft, topic: event.target.value })} /></div>
+              <div><label>Date</label><input type="date" value={scheduleDraft.date} onChange={(event) => setScheduleDraft({ ...scheduleDraft, date: event.target.value })} /></div>
+              <div><label>Time</label><input type="time" value={scheduleDraft.time} onChange={(event) => setScheduleDraft({ ...scheduleDraft, time: event.target.value })} /></div>
+              <div><label>Duration</label><input type="number" min="1" step="1" value={scheduleDraft.durationMinutes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, durationMinutes: event.target.value })} /></div>
+              <div className="wide"><label>Note</label><input value={scheduleDraft.notes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, notes: event.target.value })} placeholder="Goals, files, preparation..." /></div>
+              <button className="primary" onClick={createScheduleFromMessage}>Create & Send</button>
+            </div>
+          )}
+
+          <div className="chat-messages message-thread-body">
+            <div className="thread-date-divider">TODAY</div>
+            {activeMessages.length === 0 && <p className="muted-text center-text">No messages yet. Start a conversation.</p>}
+            {activeMessages.map((message) => (
+              <div className={`bubble-row ${message.direction === 'outgoing' ? 'me' : 'them'}`} key={message.id}>
+                {message.direction !== 'outgoing' && <Avatar text={activeProfile?.avatar || getInitials(activeContact)} />}
+                <div className={`bubble ${message.direction === 'outgoing' ? 'outgoing' : 'incoming'}`}>
+                  {message.attachment && <MediaPreview attachment={message.attachment} />}
+                  <p>{message.body}</p>
+                  <small>{message.type} • {message.time}{message.delivered ? ' • Delivered' : ''}{message.reaction ? ` • ${message.reaction}` : ''}</small>
+                </div>
+                {message.direction === 'outgoing' && <Avatar text={user.avatar} />}
+              </div>
+            ))}
+          </div>
+
+          <div className="messenger-composer modern-composer simple-message-composer attachment-message-composer">
+            <label className="attachment-button clip-attachment-button" htmlFor="message-attachment-input" title="Attach image or file" aria-label="Attach image or file">📎</label>
+            <input id="message-attachment-input" className="hidden-file-input" type="file" multiple onChange={sendMediaFiles} />
+            <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') sendMessage(); }} placeholder={composerMode === 'schedule' ? `Type schedule note for ${activeContact}...` : 'Type a message...'} />
+            <button className="primary messenger-send-button" onClick={() => sendMessage()}>Send</button>
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+
+
+function MediaPreview({ attachment }) {
+  if (!attachment?.url) return null;
+  if (attachment.kind === 'video') {
+    return <video className="message-media" src={attachment.url} controls preload="metadata" />;
+  }
+  if (attachment.kind === 'image') {
+    return <img className="message-media" src={attachment.url} alt={attachment.name || 'attachment'} />;
+  }
+  return <a className="message-file-chip" href={attachment.url} download={attachment.name || 'attachment'}>📎 {attachment.name || 'Download file'}</a>;
+}
+
+function ProfilePage({ user, setUser, level, teacherApplications, setTeacherApplications }) {
+  const buildDraft = (source) => ({
+    ...source,
+    languagesInput: (source.languages || []).join(', '),
+    interestsInput: (source.interests || []).join(', '),
+  });
+  const [draft, setDraft] = useState(buildDraft(user));
+  const [editDraft, setEditDraft] = useState(buildDraft(user));
+  const [application, setApplication] = useState({
+    linkedInUrl: user.social || '',
+    cvUrl: '',
+    licenseUrl: '',
+    authorityName: '',
+    subject: 'Japanese',
+    requestedRole: 'assistant_teacher',
+    learnerLevel: user.learnerLevel || 'Beginner',
+    teacherLevelClaim: '',
+    note: '',
+  });
+  const [applicationNotice, setApplicationNotice] = useState('');
+  const [profileNotice, setProfileNotice] = useState('');
+  const [showLevelDialog, setShowLevelDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const myApplications = (teacherApplications || []).filter((item) => item.userId === user.id || item.username === user.username || item.email === user.email);
+
+  function parseList(value) {
+    return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  function openEditDialog() {
+    setEditDraft(buildDraft(draft));
+    setProfileNotice('');
+    setShowEditDialog(true);
+  }
+
+  async function saveProfileEdits() {
+    setProfileNotice('');
+    if (!String(editDraft.fullName || '').trim()) {
+      setProfileNotice('Name is required.');
+      return;
+    }
+    if (!/^[a-z0-9_]{3,24}$/.test(String(editDraft.username || '').trim())) {
+      setProfileNotice('Username must be 3-24 characters: lowercase letters, numbers, underscore only.');
+      return;
+    }
+    const normalized = {
+      ...draft,
+      ...editDraft,
+      fullName: String(editDraft.fullName || '').trim(),
+      username: String(editDraft.username || '').trim().toLowerCase(),
+      email: String(editDraft.email || '').trim(),
+      avatar: editDraft.avatar || getInitials(editDraft.fullName),
+      age: editDraft.age,
+      languages: parseList(editDraft.languagesInput),
+      interests: parseList(editDraft.interestsInput),
+    };
+    setSavingProfile(true);
+    try {
+      if (localStorage.getItem('knowhow-token')) {
+        await apiRequest('/users/me/profile', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            fullName: normalized.fullName,
+            username: normalized.username,
+            email: normalized.email,
+            profile: {
+              builtInAvatar: normalized.avatar,
+              bio: normalized.bio || '',
+              region: normalized.region || '',
+              age: normalized.age ? Number(normalized.age) : undefined,
+              languages: normalized.languages,
+              interests: normalized.interests,
+              education: normalized.education ? [{ degree: normalized.education }] : [],
+              workExperience: normalized.work ? [{ role: normalized.work }] : [],
+              portfolioLinks: normalized.portfolio ? [normalized.portfolio] : [],
+              socialLinks: normalized.social ? [normalized.social] : [],
+              theme: normalized.theme || 'light',
+              notifications: { sessionReminders: normalized.notifications !== false },
+              privacy: { showRegion: normalized.privacy !== 'Private' && normalized.privacy !== 'Private profile' },
+            },
+          }),
+        });
+      }
+      setDraft(buildDraft(normalized));
+      setUser(normalized);
+      setShowEditDialog(false);
+    } catch (error) {
+      setProfileNotice(error.message || 'Profile could not be saved.');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  function addOfferedSkill() {
+    const nextDraft = {
+      ...draft,
+      skillsOffered: [
+        ...draft.skillsOffered,
+        { id: crypto.randomUUID(), name: 'New Skill', category: 'Creative', description: 'Describe your skill.', level: 'Beginner', availability: 'Flexible', duration: 1 },
+      ],
+    };
+    setDraft(nextDraft);
+    setUser(nextDraft);
+  }
+
+  function addWantedSkill() {
+    const nextDraft = {
+      ...draft,
+      skillsWanted: [
+        ...draft.skillsWanted,
+        { id: crypto.randomUUID(), name: 'New Learning Goal', category: 'Business', goal: 'Describe your goal.', target: 'Beginner' },
+      ],
+    };
+    setDraft(nextDraft);
+    setUser(nextDraft);
+  }
+
+  async function submitTeacherApplication() {
+    setApplicationNotice('');
+    if (!application.subject.trim()) {
+      setApplicationNotice('Subject is required.');
+      return;
+    }
+    if (!application.linkedInUrl.trim() && !application.cvUrl.trim() && !application.licenseUrl.trim()) {
+      setApplicationNotice('Please add at least one proof: LinkedIn, CV/portfolio, or license/certificate link.');
+      return;
+    }
+    const pendingDuplicate = myApplications.find((item) => item.status === 'Pending' && normalizeText(item.subject) === normalizeText(application.subject));
+    if (pendingDuplicate) {
+      setApplicationNotice('You already have a pending application for this subject.');
+      return;
+    }
+    const newApplication = {
+      id: crypto.randomUUID(),
+      source: 'local-demo',
+      userId: user.id,
+      userName: draft.fullName,
+      username: draft.username,
+      email: user.email,
+      subject: application.subject.trim(),
+      requestedRole: application.requestedRole,
+      learnerLevel: application.learnerLevel,
+      teacherLevelClaim: application.teacherLevelClaim || (application.requestedRole === 'teacher' ? 'Qualified teacher level claimed' : 'Assistant teacher level claimed'),
+      linkedInUrl: application.linkedInUrl.trim(),
+      cvUrl: application.cvUrl.trim(),
+      licenseUrl: application.licenseUrl.trim(),
+      authorityName: application.authorityName.trim(),
+      note: application.note.trim(),
+      status: 'Pending',
+      submittedAt: new Date().toISOString(),
+      reviewTrail: [{ at: new Date().toISOString(), action: 'Submitted', by: draft.fullName }],
+    };
+    setTeacherApplications([newApplication, ...(teacherApplications || [])]);
+    const nextDraft = {
+      ...draft,
+      teacherPath: `${application.requestedRole === 'teacher' ? 'Teacher' : 'Assistant Teacher'} application pending`,
+      licenseStatus: application.licenseUrl || application.authorityName ? 'Submitted' : 'LinkedIn/CV submitted',
+    };
+    setDraft(buildDraft(nextDraft));
+    setUser(nextDraft);
+
+    try {
+      await apiRequest('/qualifications/teacher-applications', {
+        method: 'POST',
+        body: JSON.stringify({
+          subject: newApplication.subject,
+          requestedRole: newApplication.requestedRole,
+          learnerLevel: newApplication.learnerLevel,
+          teacherLevelClaim: newApplication.teacherLevelClaim,
+          linkedInUrl: newApplication.linkedInUrl,
+          cvUrl: newApplication.cvUrl,
+          licenseUrl: newApplication.licenseUrl,
+          authorityName: newApplication.authorityName,
+          note: newApplication.note,
+        }),
+      });
+      setApplicationNotice('Application submitted.');
+    } catch (error) {
+      setApplicationNotice('Application saved locally.');
+    }
+  }
+
+  function updateOfferedSkill(index, next) {
+    const updated = [...draft.skillsOffered];
+    updated[index] = next;
+    const nextDraft = { ...draft, skillsOffered: updated };
+    setDraft(nextDraft);
+    setUser(nextDraft);
+  }
+
+  function updateWantedSkill(index, next) {
+    const updated = [...draft.skillsWanted];
+    updated[index] = next;
+    const nextDraft = { ...draft, skillsWanted: updated };
+    setDraft(nextDraft);
+    setUser(nextDraft);
+  }
+
+  return (
+    <section>
+      <ProfileOptionLists />
+      <PageHeader title="Profile" subtitle="View your profile details, skills, XP, and teaching level." />
+      <div className="profile-grid">
+        <div className="card profile-display-card profile-main-card-with-edit">
+          <button className="profile-edit-pencil" type="button" onClick={openEditDialog} title="Edit profile" aria-label="Edit profile">✎</button>
+          <div className="profile-head">
+            <Avatar text={draft.avatar || getInitials(draft.fullName)} large />
+            <div>
+              <h2>{draft.fullName}</h2>
+              <p>@{draft.username} • {draft.role}</p>
+            </div>
+          </div>
+          <div className="profile-readonly-grid">
+            <MiniPill title="Email" text={draft.email || 'Not added'} />
+            <MiniPill title="Languages" text={(draft.languages || []).join(', ') || 'Not added'} />
+            <MiniPill title="Region" text={draft.region || 'Not added'} />
+            <MiniPill title="Age" text={draft.age || 'Not added'} />
+          </div>
+          <div className="readonly-section"><label>Interests</label><p>{(draft.interests || []).join(', ') || 'Not added'}</p></div>
+          <div className="readonly-section"><label>Bio</label><p>{draft.bio || 'No bio added yet.'}</p></div>
+          <div className="readonly-section"><label>Education</label><p>{draft.education || 'Not added'}</p></div>
+          <div className="readonly-section"><label>Work Experience</label><p>{draft.work || 'Not added'}</p></div>
+          <div className="profile-link-grid">
+            <MiniPill title="Portfolio" text={draft.portfolio || 'Not added'} />
+            <MiniPill title="Social" text={draft.social || 'Not added'} />
+          </div>
+        </div>
+
+        <div className="card profile-xp-card">
+          <div className="section-title"><h3>XP, Badges & Challenges</h3><span className="pill muted">{level.name} • {draft.xp}/{level.next} XP</span></div>
+          <div className="progress"><span style={{ width: `${level.progress}%` }} /></div>
+          <div className="badge-grid compact-view">
+            {['First Exchange', 'First Skill Shared', '10 Hours Taught', 'Community Helper', 'Top Mentor', 'Knowledge Champion', '100 Hours Completed'].map((badge) => (
+              <div className={`badge ${draft.badges.includes(badge) ? 'earned' : ''}`} key={badge}>🏅<span>{badge}</span></div>
+            ))}
+          </div>
+          <h3>Challenges</h3>
+          <div className="challenge-grid">
+            {CHALLENGES.map((challenge) => {
+              const percent = Math.min(100, Math.round((challenge.progress / challenge.total) * 100));
+              return <div className="challenge-card" key={challenge.title}><strong>{challenge.title}</strong><span>{challenge.progress}/{challenge.total} complete • +{challenge.reward} XP</span><div className="progress"><span style={{ width: `${percent}%` }} /></div></div>;
+            })}
+          </div>
+        </div>
+      </div>
+
+      {showEditDialog && (
+        <div className="modal-backdrop">
+          <div className="modal card profile-edit-modal">
+            <div className="section-title">
+              <h2>Edit Profile</h2>
+              <button className="icon" type="button" onClick={() => setShowEditDialog(false)}>×</button>
+            </div>
+            <div className="profile-head compact-profile-head">
+              <Avatar text={editDraft.avatar || getInitials(editDraft.fullName)} />
+              <div><strong>{editDraft.fullName || 'Your name'}</strong><span>@{editDraft.username || 'username'}</span></div>
+            </div>
+            <label>Avatar</label>
+            <div className="avatar-picker">
+              {['KH', getInitials(editDraft.fullName), '😊', '🌱', '📘', '🚀'].map((avatarOption) => (
+                <button type="button" key={avatarOption} className={editDraft.avatar === avatarOption ? 'active' : ''} onClick={() => setEditDraft({ ...editDraft, avatar: avatarOption })}>{avatarOption}</button>
+              ))}
+              <input value={editDraft.avatar || ''} maxLength="3" onChange={(event) => setEditDraft({ ...editDraft, avatar: event.target.value.slice(0, 3) })} placeholder="Custom" />
+            </div>
+            <div className="form-grid two">
+              <div><label>Full Name</label><input value={editDraft.fullName || ''} onChange={(event) => setEditDraft({ ...editDraft, fullName: event.target.value })} /></div>
+              <div><label>Username</label><input value={editDraft.username || ''} onChange={(event) => setEditDraft({ ...editDraft, username: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })} /></div>
+            </div>
+            <label>Email</label>
+            <input value={editDraft.email || ''} type="email" onChange={(event) => setEditDraft({ ...editDraft, email: event.target.value })} />
+            <div className="form-grid three">
+              <div><label>Languages</label><input list="language-options" value={editDraft.languagesInput || ''} onChange={(event) => setEditDraft({ ...editDraft, languagesInput: event.target.value })} placeholder="Myanmar, English" /></div>
+              <div><label>Region</label><input list="region-options" value={editDraft.region || ''} onChange={(event) => setEditDraft({ ...editDraft, region: event.target.value })} placeholder="Yangon, Myanmar" /></div>
+              <div><label>Age</label><input type="number" min="13" max="120" value={editDraft.age || ''} onChange={(event) => setEditDraft({ ...editDraft, age: event.target.value })} /></div>
+            </div>
+            <label>Interests</label>
+            <input value={editDraft.interestsInput || ''} onChange={(event) => setEditDraft({ ...editDraft, interestsInput: event.target.value })} placeholder="Japanese, Video Editing, UI/UX" />
+            <label>Bio</label>
+            <textarea value={editDraft.bio || ''} onChange={(event) => setEditDraft({ ...editDraft, bio: event.target.value })} />
+            <div className="form-grid two">
+              <div><label>Education</label><input value={editDraft.education || ''} onChange={(event) => setEditDraft({ ...editDraft, education: event.target.value })} /></div>
+              <div><label>Work Experience</label><input value={editDraft.work || ''} onChange={(event) => setEditDraft({ ...editDraft, work: event.target.value })} /></div>
+            </div>
+            <div className="form-grid two">
+              <div><label>Portfolio Link</label><input value={editDraft.portfolio || ''} onChange={(event) => setEditDraft({ ...editDraft, portfolio: event.target.value })} /></div>
+              <div><label>LinkedIn / Social Media Link</label><input value={editDraft.social || ''} onChange={(event) => setEditDraft({ ...editDraft, social: event.target.value })} /></div>
+            </div>
+
+            <div className="edit-profile-skills-panel">
+              <div className="section-title"><h3>Skills Offered</h3><button className="ghost" type="button" onClick={() => setEditDraft({ ...editDraft, skillsOffered: [...(editDraft.skillsOffered || []), { id: crypto.randomUUID(), name: 'New Skill', category: 'General', level: 'Beginner', description: 'Describe this skill.', certificate: '', duration: 1 }] })}>Add</button></div>
+              <div className="list">
+                {(editDraft.skillsOffered || []).map((skill, index) => (
+                  <SkillEditor key={skill.id || index} skill={skill} onChange={(next) => {
+                    const updated = [...(editDraft.skillsOffered || [])];
+                    updated[index] = next;
+                    setEditDraft({ ...editDraft, skillsOffered: updated });
+                  }} />
+                ))}
+              </div>
+            </div>
+
+            <div className="edit-profile-skills-panel">
+              <div className="section-title"><h3>Skills Wanted</h3><button className="ghost" type="button" onClick={() => setEditDraft({ ...editDraft, skillsWanted: [...(editDraft.skillsWanted || []), { id: crypto.randomUUID(), name: 'New Goal', category: 'General', goal: 'Describe your goal.', target: 'Beginner' }] })}>Add</button></div>
+              <div className="list">
+                {(editDraft.skillsWanted || []).map((skill, index) => (
+                  <WantedSkillEditor key={skill.id || index} skill={skill} onChange={(next) => {
+                    const updated = [...(editDraft.skillsWanted || [])];
+                    updated[index] = next;
+                    setEditDraft({ ...editDraft, skillsWanted: updated });
+                  }} />
+                ))}
+              </div>
+            </div>
+
+            {profileNotice && <p className="error-text">{profileNotice}</p>}
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={() => setShowEditDialog(false)}>Cancel</button>
+              <button className="primary" type="button" onClick={saveProfileEdits} disabled={savingProfile}>{savingProfile ? 'Saving...' : 'Save Changes'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLevelDialog && (
+        <div className="modal-backdrop">
+          <div className="modal card level-form-modal">
+            <div className="section-title">
+              <h2>Learner & Teacher Levels</h2>
+              <button className="icon" type="button" onClick={() => setShowLevelDialog(false)}>×</button>
+            </div>
+            <div className="level-grid">
+              <MiniPill title="Learner Level" text={draft.learnerLevel} />
+              <MiniPill title="Teacher Level" text={draft.teacherLevel} />
+              <MiniPill title="License Status" text={draft.licenseStatus} />
+            </div>
+            <div className="list level-subject-list">
+              {draft.subjectLevels.map((subjectLevel, index) => (
+                <div className="skill-row" key={`${subjectLevel.subject}-${index}`}>
+                  <div><strong>{subjectLevel.subject}</strong><span>Learner: {subjectLevel.learnerLevel} • Teacher: {subjectLevel.teacherLevel}</span></div>
+                </div>
+              ))}
+            </div>
+
+            <h3>Apply for Teaching Authority</h3>
+            <div className="form-grid two">
+              <div><label>Subject</label><input value={application.subject} onChange={(event) => setApplication({ ...application, subject: event.target.value })} placeholder="Japanese, English Speaking..." /></div>
+              <div><label>Requested Role</label><select value={application.requestedRole} onChange={(event) => setApplication({ ...application, requestedRole: event.target.value })}><option value="assistant_teacher">Assistant Teacher</option><option value="teacher">Teacher</option></select></div>
+            </div>
+            <div className="form-grid two">
+              <div><label>Your Learner Level</label><input value={application.learnerLevel} onChange={(event) => setApplication({ ...application, learnerLevel: event.target.value })} placeholder="N5, Beginner, Intermediate..." /></div>
+              <div><label>Teacher Level Claim</label><input value={application.teacherLevelClaim} onChange={(event) => setApplication({ ...application, teacherLevelClaim: event.target.value })} placeholder="N1, Advanced, Certified..." /></div>
+            </div>
+            <label>LinkedIn</label>
+            <input value={application.linkedInUrl} onChange={(event) => setApplication({ ...application, linkedInUrl: event.target.value })} placeholder="https://linkedin.com/in/..." />
+            <label>CV / Portfolio URL</label>
+            <input value={application.cvUrl} onChange={(event) => setApplication({ ...application, cvUrl: event.target.value })} placeholder="CV, resume, portfolio, Google Drive link" />
+            <label>License / Educational Authority Proof</label>
+            <input value={application.licenseUrl} onChange={(event) => setApplication({ ...application, licenseUrl: event.target.value })} placeholder="Certificate/license number or link" />
+            <label>Authority / School / Organization Name</label>
+            <input value={application.authorityName} onChange={(event) => setApplication({ ...application, authorityName: event.target.value })} placeholder="University, school, company, training center" />
+            <label>Admin Note</label>
+            <textarea value={application.note} onChange={(event) => setApplication({ ...application, note: event.target.value })} placeholder="Explain why you are qualified and what you can teach." />
+            {applicationNotice && <div className="notice">{applicationNotice}</div>}
+            <button className="primary full" type="button" onClick={submitTeacherApplication}>Submit to Admin Review</button>
+          </div>
+        </div>
+      )}
+
+      <div className="card level-popup-card swapped-level-card">
+        <div className="section-title">
+          <h3>Learner & Teacher Levels</h3>
+          <button className="primary" type="button" onClick={() => setShowLevelDialog(true)}>Open Form</button>
+        </div>
+        <div className="level-grid">
+          <MiniPill title="Learner Level" text={draft.learnerLevel} />
+          <MiniPill title="Teacher Level" text={draft.teacherLevel} />
+          <MiniPill title="License Status" text={draft.licenseStatus} />
+        </div>
+        {applicationNotice && <div className="notice compact-notice">{applicationNotice}</div>}
+      </div>
+    </section>
+  );
+}
+
+
+function SettingsPage({ user, setUser, onLogout }) {
+  const [activeSection, setActiveSection] = useState('security');
+  const [settingsSearch, setSettingsSearch] = useState('');
+  const [draft, setDraft] = useState({
+    theme: user.theme || 'light',
+    privacy: user.privacy || 'Community visible',
+    notifications: user.notifications ?? true,
+    twoFactor: user.twoFactor ?? false,
+    criticalAlerts: true,
+    loginAlerts: true,
+    marketingEmails: false,
+    publicProfile: user.privacy !== 'Private profile',
+    showRegion: user.privacy !== 'Private profile',
+    allowMessages: true,
+    autoPlayFreeVideos: true,
+    compactMode: false,
+  });
+  const [passwordDraft, setPasswordDraft] = useState({ old: '', next: '', confirm: '' });
+  const [settingsNotice, setSettingsNotice] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [subscriptionPlan, setSubscriptionPlan] = useState('Free');
+
+  const sections = [
+    { id: 'profile', label: 'Profile', icon: '👤' },
+    { id: 'security', label: 'Security', icon: '🛡️' },
+    { id: 'notifications', label: 'Notifications', icon: '🔔' },
+    { id: 'privacy', label: 'Privacy', icon: '🔒' },
+    { id: 'billing', label: 'Payment Info', icon: '💳' },
+    { id: 'subscription', label: 'Subscription', icon: '⭐' },
+    { id: 'appearance', label: 'Appearance', icon: '👁️' },
+    { id: 'integrations', label: 'Integrations', icon: '⚙️' },
+    { id: 'support', label: 'Help and Support', icon: '?' },
+    { id: 'about', label: 'About', icon: 'i' },
+  ];
+
+  const filteredSections = sections.filter((item) => item.label.toLowerCase().includes(settingsSearch.toLowerCase().trim()));
+
+  useEffect(() => {
+    if (!settingsNotice) return undefined;
+    const timer = window.setTimeout(() => setSettingsNotice(''), 2400);
+    return () => window.clearTimeout(timer);
+  }, [settingsNotice]);
+
+  function setDraftField(field, value) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function applyUserSettings(nextDraft = draft) {
+    setUser({
+      ...user,
+      theme: nextDraft.theme,
+      privacy: nextDraft.publicProfile ? (nextDraft.showRegion ? 'Community visible' : 'Only matched users') : 'Private profile',
+      notifications: nextDraft.notifications,
+      twoFactor: nextDraft.twoFactor,
+    });
+  }
+
+  function updateTheme(isDark) {
+    const nextDraft = { ...draft, theme: isDark ? 'dark' : 'light' };
+    setDraft(nextDraft);
+    applyUserSettings(nextDraft);
+    setSettingsNotice(`${isDark ? 'Dark' : 'Light'} mode applied.`);
+  }
+
+  function updatePrivacy(field, value) {
+    const nextDraft = { ...draft, [field]: value };
+    setDraft(nextDraft);
+    applyUserSettings(nextDraft);
+  }
+
+  function changePassword(event) {
+    event.preventDefault();
+    if (!passwordDraft.old || !passwordDraft.next || !passwordDraft.confirm) {
+      setSettingsNotice('Fill old password, new password, and confirm password.');
+      return;
+    }
+    if (passwordDraft.next.length < 6) {
+      setSettingsNotice('New password must be at least 6 characters.');
+      return;
+    }
+    if (passwordDraft.next !== passwordDraft.confirm) {
+      setSettingsNotice('New password and confirmation do not match.');
+      return;
+    }
+    setPasswordDraft({ old: '', next: '', confirm: '' });
+    setSettingsNotice('Password update saved for this demo account.');
+  }
+
+  function toggleTwoFactor() {
+    const nextDraft = { ...draft, twoFactor: !draft.twoFactor };
+    setDraft(nextDraft);
+    applyUserSettings(nextDraft);
+    setSettingsNotice(nextDraft.twoFactor ? 'Two-factor authentication enabled.' : 'Two-factor authentication disabled.');
+  }
+
+  function saveAll() {
+    applyUserSettings();
+    setSettingsNotice('Settings saved.');
+  }
+
+  function sendFeedback() {
+    if (!feedback.trim()) {
+      setSettingsNotice('Please add a short support message first.');
+      return;
+    }
+    setFeedback('');
+    setSettingsNotice('Your support message was saved for the Know-how team.');
+  }
+
+  function renderSection() {
+    if (activeSection === 'profile') {
+      return (
+        <div className="settings-panel-card">
+          <h2>Profile Settings</h2>
+          <div className="settings-profile-summary">
+            <Avatar text={user.avatar || getInitials(user.fullName)} large />
+            <div><strong>{user.fullName}</strong><span>@{user.username} • {user.email}</span></div>
+          </div>
+          <div className="settings-form-grid two">
+            <MiniPill title="Region" text={user.region || 'Not set'} />
+            <MiniPill title="Languages" text={(user.languages || []).join(', ') || 'Not set'} />
+            <MiniPill title="Role" text={user.role || 'Learner'} />
+            <MiniPill title="Credits" text={`${formatCredits(user.wallet?.current || 0)} credits`} />
+          </div>
+          <p className="muted-text">Use the Profile page Edit button to update name, language, region, education, links, and other personal details.</p>
+        </div>
+      );
+    }
+
+    if (activeSection === 'security') {
+      return (
+        <div className="settings-panel-card">
+          <div className="settings-section-head"><div><h2>Security Settings</h2><p>Control password, login protection, and recent sessions.</p></div><button className="ghost" type="button" onClick={saveAll}>Save</button></div>
+          <form className="security-inline-form" onSubmit={changePassword}>
+            <h3>Change Password</h3>
+            <div><label>Old</label><input type="password" value={passwordDraft.old} onChange={(event) => setPasswordDraft({ ...passwordDraft, old: event.target.value })} /></div>
+            <div><label>New</label><input type="password" value={passwordDraft.next} onChange={(event) => setPasswordDraft({ ...passwordDraft, next: event.target.value })} /></div>
+            <div><label>Confirm</label><input type="password" value={passwordDraft.confirm} onChange={(event) => setPasswordDraft({ ...passwordDraft, confirm: event.target.value })} /></div>
+            <button className="primary" type="submit">Update Password</button>
+          </form>
+          <div className="settings-row bordered-row">
+            <div><strong>Two-Factor Authentication (2FA)</strong><span>Require an extra verification step when signing in.</span></div>
+            <label className="mini-switch"><input type="checkbox" checked={draft.twoFactor} onChange={toggleTwoFactor} /><i /></label>
+            <button className="ghost" type="button" onClick={() => { setDraftField('twoFactor', true); setSettingsNotice('2FA setup opened for demo mode.'); }}>Setup 2FA</button>
+          </div>
+          <div className="login-activity-block">
+            <div className="settings-section-head small"><h3>Login Activity</h3><button className="ghost" type="button" onClick={() => setSettingsNotice('All other devices were logged out in demo mode.')}>Log Out All Devices</button></div>
+            {['Windows Chrome - Current device', 'iPhone 14 - Yangon, Myanmar', 'Android Browser - Mandalay, Myanmar'].map((item) => <div className="device-row" key={item}><span>▣</span><strong>{item}</strong><small>Location checked</small></div>)}
+          </div>
+          <div className="settings-check-grid">
+            <label><input type="checkbox" checked={draft.criticalAlerts} onChange={(event) => setDraftField('criticalAlerts', event.target.checked)} /> Critical alerts</label>
+            <label><input type="checkbox" checked={draft.loginAlerts} onChange={(event) => setDraftField('loginAlerts', event.target.checked)} /> New login attempts</label>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeSection === 'notifications') {
+      return (
+        <div className="settings-panel-card">
+          <h2>Notification Settings</h2>
+          <label className="settings-row"><span><strong>Session reminders</strong><small>Notify before upcoming sessions.</small></span><input type="checkbox" checked={draft.notifications} onChange={(event) => { const nextDraft = { ...draft, notifications: event.target.checked }; setDraft(nextDraft); applyUserSettings(nextDraft); }} /></label>
+          <label className="settings-row"><span><strong>Login alerts</strong><small>Email when a new device logs in.</small></span><input type="checkbox" checked={draft.loginAlerts} onChange={(event) => setDraftField('loginAlerts', event.target.checked)} /></label>
+          <label className="settings-row"><span><strong>Product updates</strong><small>Occasional Know-how announcements.</small></span><input type="checkbox" checked={draft.marketingEmails} onChange={(event) => setDraftField('marketingEmails', event.target.checked)} /></label>
+        </div>
+      );
+    }
+
+    if (activeSection === 'privacy') {
+      return (
+        <div className="settings-panel-card">
+          <h2>Privacy Settings</h2>
+          <label className="settings-row"><span><strong>Public profile</strong><small>Allow learners and teachers to view your profile.</small></span><input type="checkbox" checked={draft.publicProfile} onChange={(event) => updatePrivacy('publicProfile', event.target.checked)} /></label>
+          <label className="settings-row"><span><strong>Show region</strong><small>Display your region in search and profile preview.</small></span><input type="checkbox" checked={draft.showRegion} onChange={(event) => updatePrivacy('showRegion', event.target.checked)} /></label>
+          <label className="settings-row"><span><strong>Allow direct messages</strong><small>Let matched users message you.</small></span><input type="checkbox" checked={draft.allowMessages} onChange={(event) => setDraftField('allowMessages', event.target.checked)} /></label>
+        </div>
+      );
+    }
+
+    if (activeSection === 'billing') {
+      const paymentMethods = [
+        { name: 'Primary card', detail: 'Visa •••• 4242', status: 'Default' },
+        { name: 'Backup wallet', detail: 'Know-how credits balance', status: `${formatCredits(user.wallet?.current || 0)} credits` },
+      ];
+      const invoices = [
+        { date: '2026-06-01', title: 'Monthly subscription', amount: subscriptionPlan === 'Premium' ? '$6.99 demo' : '$0 demo', status: 'Paid' },
+        { date: '2026-05-01', title: 'Lecture access pass', amount: '$9 demo', status: 'Paid' },
+      ];
+      return (
+        <div className="settings-panel-card billing-settings-panel">
+          <div className="settings-section-head">
+            <div><h2>Payment Info</h2><p>Manage saved payment methods, invoices, credit balance, and lecture purchases.</p></div>
+            <button className="ghost" type="button" onClick={() => setSettingsNotice('Payment details refreshed.')}>Refresh</button>
+          </div>
+          <div className="billing-hero-grid">
+            <div className="billing-payment-card">
+              <span>Default payment method</span>
+              <strong>Visa •••• 4242</strong>
+              <small>Expires 12/29 • used for Premium and paid lecture videos</small>
+              <div className="billing-action-row"><button className="ghost" type="button" onClick={() => setSettingsNotice('Payment method editor opened in demo mode.')}>Edit Payment</button><button className="ghost" type="button" onClick={() => setSettingsNotice('New payment method flow opened.')}>Add Method</button></div>
+            </div>
+            <div className="billing-plan-card upgraded-billing-card">
+              <span>Credit wallet</span>
+              <strong>{formatCredits(user.wallet?.current || 0)} Credits</strong>
+              <small>{user.wallet?.lectureAccess || 0} video access pass • purchases stay separate from subscription</small>
+            </div>
+          </div>
+          <div className="billing-info-grid">
+            <div className="settings-sub-card"><div className="settings-section-head small"><h3>Payment Methods</h3><button className="ghost" type="button" onClick={() => setSettingsNotice('Payment methods updated.')}>Manage</button></div>{paymentMethods.map((method) => <div className="settings-row compact-row" key={method.name}><span><strong>{method.name}</strong><small>{method.detail}</small></span><b>{method.status}</b></div>)}</div>
+            <div className="settings-sub-card"><div className="settings-section-head small"><h3>Recent Invoices</h3><button className="ghost" type="button" onClick={() => setSettingsNotice('Invoice download started in demo mode.')}>Download</button></div>{invoices.map((invoice) => <div className="settings-row compact-row" key={invoice.date}><span><strong>{invoice.title}</strong><small>{invoice.date}</small></span><span>{invoice.amount}</span><b>{invoice.status}</b></div>)}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeSection === 'subscription') {
+      const plans = [
+        { name: 'Free', price: '$0', note: 'Core learning access', perks: ['Community posts and comments', 'Basic messaging', 'Standard daily credit reward', 'Standard XP growth'] },
+        { name: 'Premium', price: '$6.99', note: 'For active learners and teachers', perks: ['Remove ads', 'Increase daily credit reward', 'Increase XP gain', 'Priority lecture video access'] },
+      ];
+      return (
+        <div className="settings-panel-card subscription-settings-panel">
+          <div className="settings-section-head">
+            <div><h2>Subscription</h2><p>Choose between Free and Premium. Premium removes ads and boosts rewards.</p></div>
+            <span className="pill muted">Current: {subscriptionPlan}</span>
+          </div>
+          <div className="subscription-plan-grid">
+            {plans.map((plan) => (
+              <button key={plan.name} type="button" className={subscriptionPlan === plan.name ? 'subscription-card active' : 'subscription-card'} onClick={() => { setSubscriptionPlan(plan.name); setSettingsNotice(`${plan.name} subscription selected.`); }}>
+                <span>{plan.name}</span>
+                <strong>{plan.price}</strong>
+                <small>{plan.note}</small>
+                <ul>{plan.perks.map((perk) => <li key={perk}>✓ {perk}</li>)}</ul>
+              </button>
+            ))}
+          </div>
+          <div className="settings-sub-card premium-benefits-card">
+            <h3>Premium Benefits</h3>
+            <div className="settings-form-grid three">
+              <MiniPill title="Ads" text="Removed from app surfaces" />
+              <MiniPill title="Daily Credit Reward" text="Higher daily bonus" />
+              <MiniPill title="XP Boost" text="Faster level progress" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeSection === 'appearance') {
+      return (
+        <div className="settings-panel-card">
+          <h2>Appearance</h2>
+          <label className="theme-toggle setting-wide-toggle">
+            <span><strong>Dark mode</strong><small>{draft.theme === 'dark' ? 'On' : 'Off'}</small></span>
+            <input type="checkbox" role="switch" checked={draft.theme === 'dark'} onChange={(event) => updateTheme(event.target.checked)} aria-label="Toggle dark mode" />
+            <i aria-hidden="true"></i>
+          </label>
+          <label className="settings-row"><span><strong>Compact mode</strong><small>Reduce spacing for dense dashboards.</small></span><input type="checkbox" checked={draft.compactMode} onChange={(event) => setDraftField('compactMode', event.target.checked)} /></label>
+          <label className="settings-row"><span><strong>Autoplay free videos</strong><small>Preview free lectures quickly from Video.</small></span><input type="checkbox" checked={draft.autoPlayFreeVideos} onChange={(event) => setDraftField('autoPlayFreeVideos', event.target.checked)} /></label>
+        </div>
+      );
+    }
+
+    if (activeSection === 'integrations') {
+      return (
+        <div className="settings-panel-card">
+          <h2>Integrations</h2>
+          {['Google Meet sessions', 'Calendar reminders', 'Portfolio links', 'Certificate storage'].map((item) => <div className="settings-row" key={item}><span><strong>{item}</strong><small>Connected in demo mode when available.</small></span><button className="ghost" type="button" onClick={() => setSettingsNotice(`${item} integration opened.`)}>Manage</button></div>)}
+        </div>
+      );
+    }
+
+    if (activeSection === 'support') {
+      return (
+        <div className="settings-panel-card">
+          <h2>Help and Support</h2>
+          <p className="muted-text">Contact customer support for account, credits, videos, or session issues.</p>
+          <a className="ghost support-link" href="mailto:support@knowhow.app?subject=Know-how%20support">Contact customer support</a>
+          <label htmlFor="settings-feedback">Feedback</label>
+          <textarea id="settings-feedback" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Write your issue or suggestion..." />
+          <button className="primary" type="button" onClick={sendFeedback}>Send Message</button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="settings-panel-card">
+        <h2>About Know-how</h2>
+        <p className="muted-text">Know-how is a learning network for skill exchange, teacher sessions, community posts, credit wallets, and lecture videos.</p>
+        <div className="settings-form-grid two">
+          <MiniPill title="Version" text="MVP demo build" />
+          <MiniPill title="Account" text={user.email || 'Signed in'} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section className="settings-desktop-page">
+      <div className="settings-window card">
+        <div className="settings-quick-actions"><button className="ghost" type="button" onClick={() => setSettingsNotice('Switch account is ready for a multi-account version.')}>⇄ Switch Account</button><button className="ghost" type="button" onClick={onLogout}>↪ Log Out</button></div>
+        <div className="settings-window-body">
+          <aside className="settings-left-menu">
+            {(filteredSections.length ? filteredSections : sections).map((item) => <button key={item.id} type="button" className={activeSection === item.id ? 'active' : ''} onClick={() => setActiveSection(item.id)}><span>{item.icon}</span>{item.label}</button>)}
+          </aside>
+          <main className="settings-content-panel">
+            {renderSection()}
+            {settingsNotice && <p className="settings-notice floating-notice" role="status">{settingsNotice}</p>}
+          </main>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CommunityPage({ user, posts = [], setPosts = () => {} }) {
+  const categories = ['All', 'Academic', 'Arts', 'Career', 'General', 'Languages', 'Lifestyle', 'Tech'];
+  const boards = [
+    { id: 'career', name: 'career', title: 'Career & Mentorship', description: 'Resume reviews, interview prep, and mentorship.', category: 'Career', tag: 'career', initial: 'C', gradient: 'linear-gradient(135deg, #6d5dfc, #0891b2)', matches: ['career', 'business'] },
+    { id: 'design', name: 'design', title: 'Design', description: 'UI/UX, illustration, and visual feedback.', category: 'Arts', tag: 'arts', initial: 'D', gradient: 'linear-gradient(135deg, #7c3aed, #2563eb)', matches: ['design', 'ui/ux', 'arts'] },
+    { id: 'general', name: 'general', title: 'General', description: 'Introductions, platform questions, and casual chat.', category: 'General', tag: 'general', initial: 'G', gradient: 'linear-gradient(135deg, #5b5ce2, #0284c7)', matches: ['general'] },
+    { id: 'languages', name: 'languages', title: 'Languages', description: 'Practice partners, learning tips, and resources for any language.', category: 'Languages', tag: 'languages', initial: 'L', gradient: 'linear-gradient(135deg, #6d5dfc, #0ea5e9)', matches: ['japanese', 'english', 'language'] },
+    { id: 'music', name: 'music', title: 'Music', description: 'Instruments, theory, production, and jam sessions.', category: 'Arts', tag: 'arts', initial: 'M', gradient: 'linear-gradient(135deg, #7c3aed, #0284c7)', matches: ['music', 'arts'] },
+    { id: 'programming', name: 'programming', title: 'Programming', description: 'Code questions, projects, and pair-programming requests.', category: 'Tech', tag: 'tech', initial: 'P', gradient: 'linear-gradient(135deg, #5b5ce2, #0891b2)', matches: ['web development', 'programming', 'tech'] },
+    { id: 'study-help', name: 'study-help', title: 'Study Help', description: 'Study plans, accountability, and help with tricky topics.', category: 'Academic', tag: 'academic', initial: 'S', gradient: 'linear-gradient(135deg, #6d5dfc, #2563eb)', matches: ['study', 'academic', 'learning'] },
+    { id: 'wellness', name: 'wellness', title: 'Wellness', description: 'Balanced routines, focus, and supportive learning habits.', category: 'Lifestyle', tag: 'lifestyle', initial: 'W', gradient: 'linear-gradient(135deg, #7c3aed, #0e7490)', matches: ['wellness', 'lifestyle'] },
+  ];
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [activeBoard, setActiveBoard] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showCreatePost, setShowCreatePost] = useState(false);
+  const [postForm, setPostForm] = useState({ community: 'General', title: '', body: '' });
+  const [commentDrafts, setCommentDrafts] = useState({});
+  const [communityNotice, setCommunityNotice] = useState('');
+  const [activeCommentsPostId, setActiveCommentsPostId] = useState(null);
+  const reactionStorageKey = `knowhow-community-reactions-${user?.id || user?.username || 'guest'}`;
+  const [reactionMap, setReactionMap] = useState(() => loadState(reactionStorageKey, {}));
+
+  const currentAuthor = user?.fullName || user?.username || 'You';
+  const normalizedSearch = normalizeText(searchTerm);
+
+  function boardMatchesPost(board, post) {
+    if (!board || !post) return false;
+    const postText = normalizeText([post.community, post.title, post.body, ...(post.tags || [])].join(' '));
+    return board.matches.some((term) => postText.includes(normalizeText(term))) || normalizeText(post.community) === normalizeText(board.title) || normalizeText(post.community) === normalizeText(board.name);
+  }
+
+  function boardMatchesSearch(board) {
+    if (!normalizedSearch) return true;
+    return normalizeText([board.name, board.title, board.description, board.category, board.tag, ...board.matches].join(' ')).includes(normalizedSearch);
+  }
+
+  function discussionCount(board) {
+    return posts.filter((post) => boardMatchesPost(board, post)).length;
+  }
+
+  function postCategory(post) {
+    const matchedBoard = boards.find((board) => boardMatchesPost(board, post));
+    return matchedBoard?.category || post.category || 'General';
+  }
+
+  function postMatchesSearch(post) {
+    if (!normalizedSearch) return true;
+    return normalizeText([post.community, post.title, post.body, post.author, ...(post.tags || [])].join(' ')).includes(normalizedSearch);
+  }
+
+  const visibleBoards = boards.filter((board) => (selectedCategory === 'All' || board.category === selectedCategory) && boardMatchesSearch(board));
+  const filteredPosts = posts.filter((post) => {
+    const categoryOkay = selectedCategory === 'All' || postCategory(post) === selectedCategory;
+    const boardOkay = activeBoard === 'all' || boardMatchesPost(boards.find((board) => board.id === activeBoard), post);
+    return categoryOkay && boardOkay && postMatchesSearch(post);
+  });
+  const activeCommentsPost = posts.find((post) => post.id === activeCommentsPostId) || null;
+
+  function updateReactionMap(nextMap) {
+    setReactionMap(nextMap);
+    localStorage.setItem(reactionStorageKey, JSON.stringify(nextMap));
+  }
+
+  function createPost(event) {
+    event.preventDefault();
+    setCommunityNotice('');
+    if (!postForm.title.trim() || !postForm.body.trim()) {
+      setCommunityNotice('Add a post title and body before publishing.');
+      return;
+    }
+    const selectedBoard = boards.find((board) => board.title === postForm.community || board.category === postForm.community || board.name === normalizeText(postForm.community));
+    const communityName = postForm.community || selectedBoard?.title || 'General';
+    const newPost = {
+      id: crypto.randomUUID(),
+      community: communityName,
+      title: postForm.title.trim(),
+      body: postForm.body.trim(),
+      author: currentAuthor,
+      votes: 0,
+      likes: 0,
+      dislikes: 0,
+      comments: [],
+      tags: [communityName, selectedBoard?.category || communityName].filter(Boolean),
+      createdAt: new Date().toISOString(),
+    };
+    setPosts([newPost, ...posts]);
+    setPostForm({ community: communityName, title: '', body: '' });
+    setActiveBoard('all');
+    setShowCreatePost(false);
+  }
+
+  function votePost(postId, delta) {
+    const current = Number(reactionMap[postId] || 0);
+    const nextReaction = current === delta ? 0 : delta;
+    const nextMap = { ...reactionMap };
+    if (nextReaction === 0) delete nextMap[postId];
+    else nextMap[postId] = nextReaction;
+    updateReactionMap(nextMap);
+
+    setPosts(posts.map((post) => {
+      if (post.id !== postId) return post;
+      let votes = Number(post.votes || 0);
+      let likes = Number(post.likes || 0);
+      let dislikes = Number(post.dislikes || 0);
+      if (current === 1) { votes -= 1; likes = Math.max(0, likes - 1); }
+      if (current === -1) { votes += 1; dislikes = Math.max(0, dislikes - 1); }
+      if (nextReaction === 1) { votes += 1; likes += 1; }
+      if (nextReaction === -1) { votes -= 1; dislikes += 1; }
+      return { ...post, votes, likes, dislikes };
+    }));
+  }
+
+  function addComment(postId) {
+    const body = String(commentDrafts[postId] || '').trim();
+    if (!body) return;
+    setPosts(posts.map((post) => {
+      if (post.id !== postId) return post;
+      return {
+        ...post,
+        comments: [
+          ...(post.comments || []),
+          { id: crypto.randomUUID(), author: currentAuthor, body, createdAt: new Date().toISOString() },
+        ],
+      };
+    }));
+    setCommentDrafts({ ...commentDrafts, [postId]: '' });
+  }
+
+  function renderComment(comment, index) {
+    if (typeof comment === 'string') return { id: `legacy-${index}`, author: 'Community member', body: comment };
+    return { id: comment.id || `comment-${index}`, author: comment.author || comment.userName || 'Community member', body: comment.body || '' };
+  }
+
+  return (
+    <section className="community-directory community-rework">
+      <header className="community-directory-header community-feed-header">
+        <div>
+          <h2>Community</h2>
+          <p>Search discussions, open a board, or tap + to publish a new post.</p>
+        </div>
+        <span className="pill muted">{filteredPosts.length}/{posts.length} posts</span>
+      </header>
+
+      <div className="community-top-search card">
+        <label className="community-search-box" aria-label="Search community">
+          <span>⌕</span>
+          <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search community posts, boards, teachers, or keywords..." />
+        </label>
+        <button className="community-plus-button" type="button" onClick={() => { setCommunityNotice(''); setShowCreatePost(true); }} aria-label="Create community post">+</button>
+      </div>
+
+      <div className="community-category-tabs" aria-label="Community categories">
+        {categories.map((category) => <button type="button" key={category} className={selectedCategory === category ? 'active' : ''} onClick={() => { setSelectedCategory(category); setActiveBoard('all'); }}>{category === 'All' ? 'All' : `# ${category.toLowerCase()}`}</button>)}
+      </div>
+
+      <div className="community-directory-grid community-board-strip">
+        {visibleBoards.map((board) => {
+          const discussions = discussionCount(board);
+          return (
+            <article className={`community-directory-card ${activeBoard === board.id ? 'active' : ''}`} key={board.id} onClick={() => setActiveBoard(activeBoard === board.id ? 'all' : board.id)}>
+              <div className="community-directory-card-head"><span className="board-mark" style={{ background: board.gradient }}>{board.initial}</span><div><h3>k/{board.name}</h3><small>{board.title}</small></div></div>
+              <p>{board.description}</p>
+              <footer><span>{discussions} post{discussions === 1 ? '' : 's'}</span><span>{board.category}</span><b>{board.tag}</b></footer>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="community-feed-list">
+        {filteredPosts.length === 0 && <div className="card"><p className="muted-text">No posts match this search or filter yet.</p></div>}
+        {filteredPosts.map((post) => {
+          const normalizedComments = (post.comments || []).map(renderComment);
+          const currentReaction = Number(reactionMap[post.id] || 0);
+          return (
+            <article className="card community-post-card compact-community-post" key={post.id}>
+              <div className="community-post-content compact-post-content">
+                <div className="post-meta"><span>k/{post.community}</span><span>Posted by {post.author || 'Community member'}</span></div>
+                <h3>{post.title}</h3>
+                <p>{post.body}</p>
+                <div className="community-post-actions post-react-actions">
+                  <button type="button" className={currentReaction === 1 ? 'active' : ''} aria-label="Like post" onClick={() => votePost(post.id, 1)}>👍 <strong>{post.likes || 0}</strong></button>
+                  <button type="button" className={currentReaction === -1 ? 'active' : ''} aria-label="Dislike post" onClick={() => votePost(post.id, -1)}>👎 <strong>{post.dislikes || 0}</strong></button>
+                  <button type="button" aria-label="Open comments" onClick={() => setActiveCommentsPostId(post.id)}>💬 <strong>{normalizedComments.length}</strong></button>
+                  <span className="post-score-chip">Score {post.votes || 0}</span>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {showCreatePost && (
+        <div className="modal-backdrop high-modal-backdrop">
+          <form className="modal card community-create-modal" onSubmit={createPost}>
+            <div className="section-title"><h3>Create Post</h3><button className="ghost" type="button" onClick={() => setShowCreatePost(false)}>Close</button></div>
+            <div className="form-grid two">
+              <div><label>Community / Board</label><select value={postForm.community} onChange={(event) => setPostForm({ ...postForm, community: event.target.value })}>{boards.map((board) => <option key={board.id} value={board.title}>{board.title}</option>)}</select></div>
+              <div><label>Title</label><input value={postForm.title} onChange={(event) => setPostForm({ ...postForm, title: event.target.value })} placeholder="Ask a question or share an update" /></div>
+            </div>
+            <label>Body</label>
+            <textarea value={postForm.body} onChange={(event) => setPostForm({ ...postForm, body: event.target.value })} placeholder="Write your post here..." />
+            {communityNotice && <p className="error-text">{communityNotice}</p>}
+            <div className="modal-actions"><button className="ghost" type="button" onClick={() => setShowCreatePost(false)}>Cancel</button><button className="primary" type="submit">Publish Post</button></div>
+          </form>
+        </div>
+      )}
+
+      {activeCommentsPost && (
+        <div className="modal-backdrop high-modal-backdrop">
+          <div className="modal card community-comments-modal">
+            <div className="section-title"><div><h3>{activeCommentsPost.title}</h3><p className="muted-text">Read and write comments without opening a large page.</p></div><button className="ghost" type="button" onClick={() => setActiveCommentsPostId(null)}>Close</button></div>
+            <div className="comment-thread-modal">
+              {(activeCommentsPost.comments || []).map(renderComment).length === 0 && <p className="muted-text">No comments yet. Start the conversation.</p>}
+              {(activeCommentsPost.comments || []).map(renderComment).map((comment) => <p key={comment.id}><strong>{comment.author}:</strong> {comment.body}</p>)}
+            </div>
+            <div className="comment-box modal-comment-box">
+              <textarea value={commentDrafts[activeCommentsPost.id] || ''} onChange={(event) => setCommentDrafts({ ...commentDrafts, [activeCommentsPost.id]: event.target.value })} placeholder="Write a comment..." />
+              <button className="primary" type="button" onClick={() => addComment(activeCommentsPost.id)}>Comment</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+
+function VideoPanelPage({ user, setUser }) {
+  const [videoSearch, setVideoSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [activeVideo, setActiveVideo] = useState(null);
+  const [videoNotice, setVideoNotice] = useState('');
+  const purchasedVideos = user.purchasedVideos || [];
+  const categories = ['All', ...Array.from(new Set(LECTURE_VIDEOS.map((video) => video.category)))];
+  const normalizedSearch = normalizeText(videoSearch);
+  const filteredVideos = LECTURE_VIDEOS.filter((video) => {
+    const categoryOkay = selectedCategory === 'All' || video.category === selectedCategory;
+    const searchOkay = !normalizedSearch || normalizeText([video.title, video.teacher, video.category, video.level, video.description].join(' ')).includes(normalizedSearch);
+    return categoryOkay && searchOkay;
+  });
+
+  function hasAccess(video) {
+    return video.priceCredits === 0 || purchasedVideos.includes(video.id);
+  }
+
+  function buyVideo(video) {
+    setVideoNotice('');
+    if (hasAccess(video)) {
+      setActiveVideo(video);
+      return;
+    }
+    const currentCredits = Number(user.wallet?.current || 0);
+    if (currentCredits < video.priceCredits) {
+      setVideoNotice(`You need ${formatCredits(video.priceCredits)} credits to unlock this lecture.`);
+      return;
+    }
+    const nextUser = {
+      ...user,
+      purchasedVideos: [...purchasedVideos, video.id],
+      wallet: normalizeWallet({ ...user.wallet, current: Number((currentCredits - video.priceCredits).toFixed(4)), lectureAccess: Number(user.wallet?.lectureAccess || 0) + 1 }),
+    };
+    setUser(nextUser);
+    setVideoNotice(`${video.title} unlocked. You can watch it now.`);
+  }
+
+  return (
+    <section className="video-panel-page">
+      <header className="community-directory-header community-feed-header">
+        <div>
+          <h2>Video</h2>
+          <p>Buy teacher-posted lectures with credits, or watch free learning videos.</p>
+        </div>
+        <span className="pill muted">{formatCredits(user.wallet?.current || 0)} credits</span>
+      </header>
+      <div className="video-toolbar card">
+        <label className="community-search-box"><span>⌕</span><input value={videoSearch} onChange={(event) => setVideoSearch(event.target.value)} placeholder="Search lecture videos..." /></label>
+        <div className="community-category-tabs video-tabs">{categories.map((category) => <button key={category} className={selectedCategory === category ? 'active' : ''} type="button" onClick={() => setSelectedCategory(category)}>{category}</button>)}</div>
+      </div>
+      {videoNotice && <div className="notice compact-notice">{videoNotice}</div>}
+      <div className="video-grid">
+        {filteredVideos.map((video) => {
+          const unlocked = hasAccess(video);
+          return (
+            <article className="card video-card" key={video.id}>
+              <div className="video-thumb"><span>▶</span><b>{video.badge}</b></div>
+              <div className="video-card-body">
+                <div className="post-meta"><span>{video.category}</span><span>{video.duration}</span><span>{video.level}</span></div>
+                <h3>{video.title}</h3>
+                <p>{video.description}</p>
+                <MiniPill title="Teacher" text={video.teacher} />
+                <div className="video-card-actions">
+                  <strong>{video.priceCredits === 0 ? 'Free' : `${formatCredits(video.priceCredits)} credits`}</strong>
+                  {unlocked ? <button className="primary" type="button" onClick={() => setActiveVideo(video)}>Watch</button> : <button className="primary" type="button" onClick={() => buyVideo(video)}>Buy</button>}
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {activeVideo && (
+        <div className="modal-backdrop high-modal-backdrop">
+          <div className="modal card video-watch-modal">
+            <div className="section-title"><h3>{activeVideo.title}</h3><button className="ghost" type="button" onClick={() => setActiveVideo(null)}>Close</button></div>
+            <div className="video-player-placeholder"><span>▶</span><strong>Lecture video preview</strong><small>{activeVideo.duration} • Teacher: {activeVideo.teacher}</small></div>
+            <p className="muted-text">This demo player represents the teacher lecture video area. Connect real video uploads or streaming later.</p>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminShell({ adminAuthed, setAdminAuthed, setAdminMode, sessions, people, transactions, userTheme, teacherApplications, setTeacherApplications, setUser }) {
+  function logoutAdmin() {
+    localStorage.removeItem('knowhow-admin-token');
+    setAdminAuthed(false);
+    setAdminMode(false);
+    window.history.pushState({}, '', '/');
+  }
+  function loginAdmin(token = 'demo-admin') {
+    localStorage.setItem('knowhow-admin-token', token);
+    setAdminAuthed(true);
+  }
+  return (
+    <div className={`app admin-only ${userTheme === 'dark' ? 'dark' : ''}`}>
+      <main className="main admin-main">
+        {adminAuthed ? <AdminPage sessions={sessions} people={people} transactions={transactions} teacherApplications={teacherApplications} setTeacherApplications={setTeacherApplications} setUser={setUser} onLogout={logoutAdmin} /> : <AdminLoginPage onSuccess={loginAdmin} />}
+      </main>
+    </div>
+  );
+}
+
+function AdminLoginPage({ onSuccess }) {
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  async function login(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/admin/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.token) {
+        onSuccess(data.token);
+        return;
+      }
+      if (form.email.toLowerCase() === 'admin@knowhow.test' && form.password === 'password123') {
+        onSuccess('demo-admin');
+        return;
+      }
+      setError(data.message || 'Admin account only. Normal learner/teacher users cannot enter this portal.');
+    } catch (error) {
+      if (form.email.toLowerCase() === 'admin@knowhow.test' && form.password === 'password123') {
+        onSuccess('demo-admin');
+        return;
+      }
+      setError('Cannot reach admin API. Use the seeded admin account in demo mode.');
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <section>
+      <PageHeader title="Admin Login" subtitle="This is a separate admin-only entry. It does not appear in normal learner/teacher accounts. Open /admin or #admin directly to access it." />
+      <form className="card auth-card" onSubmit={login}>
+        <h3>Admin Portal</h3>
+        <label>Admin Email</label>
+        <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="admin@knowhow.test" />
+        <label>Password</label>
+        <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Admin password" />
+        {error && <p className="error-text">{error}</p>}
+        <button className="primary full" type="submit" disabled={loading}>{loading ? 'Checking...' : 'Admin Login'}</button>
+      </form>
+    </section>
+  );
+}
+
+
+function AdminPage({ sessions, people, transactions, teacherApplications, setTeacherApplications, setUser, onLogout }) {
+  const normalizedApplications = (teacherApplications && teacherApplications.length ? teacherApplications : INITIAL_TEACHER_APPLICATIONS).map((item) => ({
+    ...item,
+    status: item.status || 'Pending',
+    requestedRole: item.requestedRole || 'assistant_teacher',
+    teacherLevelClaim: item.teacherLevelClaim || item.level || 'Not provided',
+  }));
+  const adminUsers = [
+    {
+      id: DEFAULT_USER.id || 'admin-u001', fullName: DEFAULT_USER.fullName, username: DEFAULT_USER.username, email: DEFAULT_USER.email, role: DEFAULT_USER.role, status: 'Active', license: DEFAULT_USER.licenseStatus, wallet: DEFAULT_USER.wallet,
+      transactions: transactions.slice(0, 4), loan: { outstanding: DEFAULT_USER.wallet.loanOutstanding, limit: LOAN_POLICY.maxOutstanding, due: DEFAULT_USER.wallet.loanDueDate || 'No due date' }, purchases: ['No purchase yet'], languages: DEFAULT_USER.languages, interests: DEFAULT_USER.interests,
+    },
+    ...people.map((person, index) => ({
+      id: person.id,
+      fullName: person.fullName,
+      username: person.username,
+      email: `${person.username}@demo.knowhow`,
+      role: index === 0 ? 'Teacher' : 'Learner',
+      status: 'Active',
+      license: index === 0 ? 'Approved' : 'Not submitted',
+      wallet: { current: 3 + index, earned: person.hoursShared / 10, spent: index, loanOutstanding: index === 2 ? 2 : 0, loanDueDate: index === 2 ? '2026-07-05' : '', purchased: index === 3 ? 5 : 0, lectureAccess: index === 1 ? 1 : 0 },
+      transactions: transactions.slice(index, index + 3),
+      loan: { outstanding: index === 2 ? 2 : 0, limit: LOAN_POLICY.maxOutstanding, due: index === 2 ? '2026-07-05' : 'No active loan' },
+      purchases: index === 3 ? ['5 Credit Points'] : index === 1 ? ['Lecture Video Pack'] : ['No purchase yet'],
+      languages: person.languages,
+      interests: person.interests,
+    })),
+    ...normalizedApplications
+      .filter((app) => !people.some((person) => person.username === app.username) && app.username !== DEFAULT_USER.username)
+      .map((app) => ({
+        id: app.userId || app.id,
+        fullName: app.userName,
+        username: app.username,
+        email: app.email,
+        role: 'Learner / Applicant',
+        status: 'Active',
+        license: app.status,
+        wallet: { current: 3, earned: 0, spent: 0, loanOutstanding: 0, loanDueDate: '', purchased: 0, lectureAccess: 0 },
+        transactions: [],
+        loan: { outstanding: 0, limit: LOAN_POLICY.maxOutstanding, due: 'No active loan' },
+        purchases: ['No purchase yet'],
+        languages: [],
+        interests: [],
+      })),
+  ];
+  const [selectedUserId, setSelectedUserId] = useState(adminUsers[0]?.id);
+  const [selectedApplicationId, setSelectedApplicationId] = useState(normalizedApplications[0]?.id);
+  const [adminNote, setAdminNote] = useState('');
+  const [adminNotice, setAdminNotice] = useState('');
+  const selectedUser = adminUsers.find((item) => item.id === selectedUserId) || adminUsers[0];
+  const selectedApplication = normalizedApplications.find((item) => item.id === selectedApplicationId) || normalizedApplications[0];
+
+  useEffect(() => {
+    let active = true;
+    async function loadRealApplications() {
+      try {
+        const backendApplications = await adminApiRequest('/admin/teacher-applications');
+        if (!active || !Array.isArray(backendApplications)) return;
+        const normalizedBackend = backendApplications.map(normalizeTeacherApplicationFromApi);
+        const localOnly = normalizedApplications.filter((item) => item.source !== 'backend' && !normalizedBackend.some((backendItem) => backendItem.id === item.id));
+        setTeacherApplications([...normalizedBackend, ...localOnly]);
+        if (normalizedBackend[0]) setSelectedApplicationId(normalizedBackend[0].id);
+        setAdminNotice('Backend teacher applications loaded. Admin review is connected to API when MongoDB/server are running.');
+      } catch (error) {
+        setAdminNotice('Using local demo review data. Backend admin review will work after logging in with a real admin token and running MongoDB/server.');
+      }
+    }
+    loadRealApplications();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function reviewApplication(id, status) {
+    const actionLabel = status === 'Approved' ? 'Approved' : status === 'Rejected' ? 'Rejected' : 'Needs More Info';
+    const reviewedBeforeUpdate = normalizedApplications.find((item) => item.id === id);
+    let apiSynced = false;
+    if (reviewedBeforeUpdate?.source === 'backend') {
+      try {
+        const updated = await adminApiRequest(`/admin/teacher-applications/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: statusToApi(actionLabel), adminNote: adminNote || `${actionLabel} by admin` }),
+        });
+        const normalizedUpdated = normalizeTeacherApplicationFromApi(updated);
+        const merged = normalizedApplications.map((item) => item.id === id ? normalizedUpdated : item);
+        setTeacherApplications(merged);
+        apiSynced = true;
+        setAdminNotice(`Backend application ${actionLabel.toLowerCase()} successfully.`);
+      } catch (error) {
+        setAdminNotice(`Backend review failed, saved local review instead: ${error.message}`);
+      }
+    }
+
+    if (!apiSynced) {
+      const nextApplications = normalizedApplications.map((item) => item.id === id ? {
+        ...item,
+        status: actionLabel,
+        adminNote: adminNote || `${actionLabel} by admin`,
+        reviewedAt: new Date().toISOString(),
+        reviewTrail: [...(item.reviewTrail || []), { at: new Date().toISOString(), action: actionLabel, by: 'Admin', note: adminNote }],
+      } : item);
+      setTeacherApplications(nextApplications);
+    }
+
+    const reviewed = (apiSynced ? normalizedApplications : normalizedApplications.map((item) => item.id === id ? { ...item, status: actionLabel } : item)).find((item) => item.id === id);
+    if ((apiSynced ? actionLabel : reviewed?.status) === 'Approved') {
+      setUser((currentUser) => {
+        if (!currentUser || (reviewed.userId && currentUser.id !== reviewed.userId && currentUser.username !== reviewed.username)) return currentUser;
+        const role = reviewed.requestedRole === 'teacher' ? 'Teacher' : 'Assistant Teacher';
+        return {
+          ...currentUser,
+          role,
+          rawRole: reviewed.requestedRole,
+          teacherLevel: reviewed.teacherLevelClaim,
+          teacherPath: `${role} approved by admin`,
+          licenseStatus: reviewed.licenseUrl || reviewed.authorityName ? 'Approved' : 'Approved without license proof',
+        };
+      });
+    }
+    setAdminNote('');
+  }
+
+  return (
+    <section>
+      <PageHeader title="Admin Dashboard" subtitle="Real-world admin review: user detail, wallet/loan/purchase audit inside account view, teaching authority applications, proof links, notes, and status trail." action={<button className="danger" onClick={onLogout}>Admin Logout</button>} />
+      <div className="stats-grid">
+        <StatCard label="Users" value={adminUsers.length} hint="Active demo users" />
+        <StatCard label="Sessions" value={sessions.length} hint="Session records" />
+        <StatCard label="Transactions" value={transactions.length} hint="Credit movement" />
+        <StatCard label="Teacher Reviews" value={normalizedApplications.filter((item) => item.status === 'Pending').length} hint="Pending license checks" />
+      </div>
+      {adminNotice && <div className="notice">{adminNotice}</div>}
+      <div className="admin-dashboard-layout">
+        <div className="card">
+          <h3>User Management</h3>
+          <div className="list">
+            {adminUsers.map((person) => (
+              <div className={`skill-row selectable ${selectedUserId === person.id ? 'selected' : ''}`} key={`${person.id}-${person.username}`} onClick={() => setSelectedUserId(person.id)}>
+                <div><strong>{person.fullName}</strong><span>@{person.username} • {person.role} • {person.status} • License: {person.license}</span></div>
+                <div className="actions inline"><button className="ghost" type="button">View</button><button className="danger" type="button">Suspend</button></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card user-account-view">
+          <div className="section-title"><h3>User Account View</h3><StatusBadge status={selectedUser.status} /></div>
+          <div className="profile-head"><Avatar text={getInitials(selectedUser.fullName)} large /><div><h2>{selectedUser.fullName}</h2><p>@{selectedUser.username} • {selectedUser.email || 'No email'} • {selectedUser.role}</p></div></div>
+          <div className="pill-wrap left">{(selectedUser.languages || []).map((item) => <span className="pill muted" key={item}>{item}</span>)}{(selectedUser.interests || []).map((item) => <span className="pill" key={item}>{item}</span>)}</div>
+          <div className="stats-grid mini-stats">
+            <StatCard label="Credits" value={selectedUser.wallet.current} hint="Available" />
+            <StatCard label="Loan" value={selectedUser.loan.outstanding} hint={`Limit ${selectedUser.loan.limit} • ${selectedUser.loan.due}`} />
+            <StatCard label="Purchased" value={selectedUser.wallet.purchased} hint="Credit points" />
+            <StatCard label="Videos" value={selectedUser.wallet.lectureAccess} hint="Lecture access" />
+          </div>
+          <h3>Loan & Purchase Oversight</h3>
+          <div className="list">
+            <MiniPill title="Loan Policy" text={`Outstanding ${selectedUser.loan.outstanding}/${selectedUser.loan.limit} credits. Due: ${selectedUser.loan.due}`} />
+            <MiniPill title="Purchases" text={selectedUser.purchases.join(', ')} />
+            {selectedUser.transactions.length ? selectedUser.transactions.map((item) => <TransactionItem key={`${selectedUser.id}-${item.id}`} item={item} />) : <p className="muted-text">No credit transactions yet.</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="two-col">
+        <div className="card">
+          <h3>Teacher / License Review</h3>
+          <div className="list">
+            {normalizedApplications.length === 0 && <p className="muted-text">No teaching applications yet.</p>}
+            {normalizedApplications.map((item) => (
+              <div className={`skill-row selectable ${selectedApplicationId === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedApplicationId(item.id)}>
+                <div><strong>{item.userName}</strong><span>{item.subject} • {item.requestedRole} • {item.status} • Submitted {String(item.submittedAt || '').slice(0, 10)}</span></div>
+                <button className="primary" type="button">View</button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          {selectedApplication ? (
+            <>
+              <div className="section-title"><h3>Review Detail</h3><StatusBadge status={selectedApplication.status} /></div>
+              <div className="profile-head"><Avatar text={getInitials(selectedApplication.userName)} /><div><h2>{selectedApplication.userName}</h2><p>@{selectedApplication.username} • {selectedApplication.email}</p></div></div>
+              <p><strong>Subject:</strong> {selectedApplication.subject}</p>
+              <p><strong>Requested role:</strong> {selectedApplication.requestedRole}</p>
+              <p><strong>Learner level:</strong> {selectedApplication.learnerLevel || 'Not provided'}</p>
+              <p><strong>Teacher level claim:</strong> {selectedApplication.teacherLevelClaim}</p>
+              <p><strong>Authority:</strong> {selectedApplication.authorityName || 'Not provided'}</p>
+              <div className="proof-list">
+                <MiniPill title="LinkedIn" text={selectedApplication.linkedInUrl || 'Not provided'} />
+                <MiniPill title="CV / Portfolio" text={selectedApplication.cvUrl || 'Not provided'} />
+                <MiniPill title="License Proof" text={selectedApplication.licenseUrl || 'Not provided'} />
+              </div>
+              <label>Admin review note</label>
+              <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} placeholder="Write why you approved/rejected or what info is missing." />
+              <div className="actions wrap">
+                <button className="success" onClick={() => reviewApplication(selectedApplication.id, 'Approved')}>Accept</button>
+                <button className="danger" onClick={() => reviewApplication(selectedApplication.id, 'Rejected')}>Reject</button>
+                <button className="ghost" onClick={() => reviewApplication(selectedApplication.id, 'Needs More Info')}>Need More Info</button>
+              </div>
+              <h3>Review Trail</h3>
+              <div className="list compact-view">{(selectedApplication.reviewTrail || []).map((trail, index) => <MiniPill key={`${trail.at}-${index}`} title={trail.action} text={`${String(trail.at).slice(0, 16)} • ${trail.by}${trail.note ? ` • ${trail.note}` : ''}`} />)}</div>
+            </>
+          ) : <p className="muted-text">Select an application to review.</p>}
+        </div>
+      </div>
+      <div className="card">
+        <h3>Session Monitoring</h3>
+        <div className="list">{sessions.map((session) => <SessionMini key={session.id} session={session} />)}</div>
+      </div>
+    </section>
+  );
+}
+
+function SkillEditor({ skill, onChange }) {
+  return (
+    <div className="editor-box">
+      <input value={skill.name} onChange={(event) => onChange({ ...skill, name: event.target.value })} />
+      <select value={skill.category} onChange={(event) => onChange({ ...skill, category: event.target.value })}>
+        {CATEGORIES.filter((item) => item !== 'All').map((item) => <option key={item}>{item}</option>)}
+      </select>
+      <select value={skill.level} onChange={(event) => onChange({ ...skill, level: event.target.value })}>
+        {LEVELS.filter((item) => item !== 'All').map((item) => <option key={item}>{item}</option>)}
+      </select>
+      <textarea value={skill.description} onChange={(event) => onChange({ ...skill, description: event.target.value })} />
+    </div>
+  );
+}
+
+function WantedSkillEditor({ skill, onChange }) {
+  return (
+    <div className="editor-box">
+      <input value={skill.name} onChange={(event) => onChange({ ...skill, name: event.target.value })} />
+      <select value={skill.category} onChange={(event) => onChange({ ...skill, category: event.target.value })}>
+        {CATEGORIES.filter((item) => item !== 'All').map((item) => <option key={item}>{item}</option>)}
+      </select>
+      <select value={skill.target} onChange={(event) => onChange({ ...skill, target: event.target.value })}>
+        {LEVELS.filter((item) => item !== 'All').map((item) => <option key={item}>{item}</option>)}
+      </select>
+      <textarea value={skill.goal} onChange={(event) => onChange({ ...skill, goal: event.target.value })} />
+    </div>
+  );
+}
+
+function generateSummary(session) {
+  return `Session completed for ${session.topic}. Key points: reviewed core concepts, practiced examples, and agreed next homework. Suggested next step: book another ${getScheduledMinutes(session)}-minute follow-up session and track progress in learning history.`;
+}
+
+function PageHeader({ action }) {
+  if (!action) return null;
+  return <div className="page-header page-header-actions">{action}</div>;
+}
+
+function StatCard({ label, value, hint }) {
+  return <div className="card stat"><span>{label}</span><strong>{value}</strong><small>{hint}</small></div>;
+}
+
+function MiniPill({ title, text }) {
+  return <div className="mini-pill"><strong>{title}</strong><span>{text}</span></div>;
+}
+
+function PersonCard({ person, user, onView }) {
+  const score = calculateMatch(user, person);
+  return (
+    <div className="person-card selectable" onClick={onView} role={onView ? 'button' : undefined} tabIndex={onView ? 0 : undefined}>
+      <Avatar text={person.avatar} />
+      <div>
+        <strong>{person.fullName}</strong>
+        <span>@{person.username} • {person.region}</span>
+        <p>{person.bio}</p>
+        <div className="pill-wrap left">{(person.interests || []).slice(0, 3).map((interest) => <span className="pill muted" key={interest}>{interest}</span>)}</div>
+        <small>{score.total}% fit • ⭐ {person.rating} • {person.hoursShared} hours shared</small>
+        {onView && <button className="ghost compact-btn" type="button" onClick={(event) => { event.stopPropagation(); onView(); }}>View Profile</button>}
+      </div>
+    </div>
+  );
+}
+
+function SessionMini({ session }) {
+  return (
+    <div className="session-mini">
+      <div>
+        <strong>{session.topic}</strong>
+        <span>{session.date} • {session.time} • {formatCredits(session.credits)} Credits</span>
+      </div>
+      <StatusBadge status={session.status} />
+    </div>
+  );
+}
+
+function TransactionItem({ item }) {
+  return (
+    <div className="transaction">
+      <div>
+        <strong>{item.title}</strong>
+        <span>{item.date} • {item.type}</span>
+      </div>
+      <b className={item.amount > 0 ? 'positive' : 'negative'}>{item.amount > 0 ? '+' : ''}{item.amount}</b>
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  return <span className={`status ${String(status).toLowerCase()}`}>{status}</span>;
+}
+
+function Avatar({ text, large }) {
+  return <div className={`avatar ${large ? 'large' : ''}`}>{text}</div>;
+}
+
+createRoot(document.getElementById('root')).render(<App />);
