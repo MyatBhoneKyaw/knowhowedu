@@ -2283,7 +2283,7 @@ function useDailyRewardAvailable(userId) {
   return available;
 }
 
-function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery, unreadMessages = 0 }) {
+function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery, unreadMessages = 0, sessions = [] }) {
   const items = [
     ['dashboard', 'Home'],
     ['community', 'Community'],
