@@ -4155,7 +4155,7 @@ function SettingsPage({ user, setUser, onLogout }) {
     { id: 'billing', label: 'Payment Info', icon: '💳' },
     { id: 'subscription', label: 'Subscription', icon: '⭐' },
     { id: 'appearance', label: 'Appearance', icon: '👁️' },
-    { id: 'integrations', label: 'Integrations', icon: '⚙️' },
+    
     { id: 'support', label: 'Help and Support', icon: '?' },
     { id: 'about', label: 'About', icon: 'i' },
   ];
