@@ -255,8 +255,13 @@ export function setTranslationLanguage(lang: string) {
 
 export function initTranslator() {
   if (typeof window === "undefined") return;
+  window.addEventListener("beforeunload", () => {
+    if (currentLang !== "en") flushCache(currentLang);
+  });
   const saved = localStorage.getItem("knowhow-language") || "English";
   if (saved !== "English") {
+    const code = saved === "Myanmar" ? "my" : saved === "Chinese" ? "zh-CN" : "en";
+    if (code !== "en") loadCache(code);
     setTimeout(() => setTranslationLanguage(saved), 300);
   }
 }
