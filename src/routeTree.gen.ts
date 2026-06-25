@@ -16,6 +16,7 @@ import { Route as ApiAuthMeRouteImport } from './routes/api/auth.me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth.login'
 import { Route as ApiAdminTeacherApplicationsRouteImport } from './routes/api/admin.teacher-applications'
 import { Route as ApiUsersMeProfileRouteImport } from './routes/api/users.me.profile'
+import { Route as ApiAdminTeacherApplicationsIdRouteImport } from './routes/api/admin.teacher-applications.$id'
 import { Route as ApiAdminAuthLoginRouteImport } from './routes/api/admin.auth.login'
 
 const IndexRoute = IndexRouteImport.update({
@@ -55,6 +56,12 @@ const ApiUsersMeProfileRoute = ApiUsersMeProfileRouteImport.update({
   path: '/api/users/me/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminTeacherApplicationsIdRoute =
+  ApiAdminTeacherApplicationsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => ApiAdminTeacherApplicationsRoute,
+  } as any)
 const ApiAdminAuthLoginRoute = ApiAdminAuthLoginRouteImport.update({
   id: '/api/admin/auth/login',
   path: '/api/admin/auth/login',
@@ -63,33 +70,36 @@ const ApiAdminAuthLoginRoute = ApiAdminAuthLoginRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
   '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
+  '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
   '/api/users/me/profile': typeof ApiUsersMeProfileRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
   '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
+  '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
   '/api/users/me/profile': typeof ApiUsersMeProfileRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
   '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
+  '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
   '/api/users/me/profile': typeof ApiUsersMeProfileRoute
 }
 export interface FileRouteTypes {
@@ -102,6 +112,7 @@ export interface FileRouteTypes {
     | '/api/auth/register'
     | '/api/qualifications/teacher-applications'
     | '/api/admin/auth/login'
+    | '/api/admin/teacher-applications/$id'
     | '/api/users/me/profile'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -112,6 +123,7 @@ export interface FileRouteTypes {
     | '/api/auth/register'
     | '/api/qualifications/teacher-applications'
     | '/api/admin/auth/login'
+    | '/api/admin/teacher-applications/$id'
     | '/api/users/me/profile'
   id:
     | '__root__'
@@ -122,12 +134,13 @@ export interface FileRouteTypes {
     | '/api/auth/register'
     | '/api/qualifications/teacher-applications'
     | '/api/admin/auth/login'
+    | '/api/admin/teacher-applications/$id'
     | '/api/users/me/profile'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiAdminTeacherApplicationsRoute: typeof ApiAdminTeacherApplicationsRoute
+  ApiAdminTeacherApplicationsRoute: typeof ApiAdminTeacherApplicationsRouteWithChildren
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
@@ -187,6 +200,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUsersMeProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/teacher-applications/$id': {
+      id: '/api/admin/teacher-applications/$id'
+      path: '/$id'
+      fullPath: '/api/admin/teacher-applications/$id'
+      preLoaderRoute: typeof ApiAdminTeacherApplicationsIdRouteImport
+      parentRoute: typeof ApiAdminTeacherApplicationsRoute
+    }
     '/api/admin/auth/login': {
       id: '/api/admin/auth/login'
       path: '/api/admin/auth/login'
@@ -197,9 +217,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ApiAdminTeacherApplicationsRouteChildren {
+  ApiAdminTeacherApplicationsIdRoute: typeof ApiAdminTeacherApplicationsIdRoute
+}
+
+const ApiAdminTeacherApplicationsRouteChildren: ApiAdminTeacherApplicationsRouteChildren =
+  {
+    ApiAdminTeacherApplicationsIdRoute: ApiAdminTeacherApplicationsIdRoute,
+  }
+
+const ApiAdminTeacherApplicationsRouteWithChildren =
+  ApiAdminTeacherApplicationsRoute._addFileChildren(
+    ApiAdminTeacherApplicationsRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiAdminTeacherApplicationsRoute: ApiAdminTeacherApplicationsRoute,
+  ApiAdminTeacherApplicationsRoute:
+    ApiAdminTeacherApplicationsRouteWithChildren,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
