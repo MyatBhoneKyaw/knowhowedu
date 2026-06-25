@@ -2106,9 +2106,11 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
       </nav>
       <div className="topbar-actions nav-account-actions" aria-label="Account shortcuts">
         <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
-          <span className="credit-balance-icon" aria-hidden="true">◎{dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}</span>
+          {dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}
+          <span className="credit-balance-icon" aria-hidden="true">◎</span>
           <span className="credit-balance-copy"><span>Credit balance{dailyAvailable && <em className="credit-balance-flag"> • Daily reward ready</em>}</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
         </button>
+
         <button className="profile-shortcut" type="button" onClick={() => setPage('profile')} title="Open profile">
           <Avatar text={user.avatar} />
           <span className="profile-shortcut-copy"><strong>{user.username}</strong><small>{level.name}</small></span>
@@ -2124,9 +2126,11 @@ function Topbar({ user, level, setPage }) {
     <header className="topbar topbar-compact">
       <div className="topbar-actions" aria-label="Account shortcuts">
         <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
-          <span className="credit-balance-icon" aria-hidden="true">◎{dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}</span>
+          {dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}
+          <span className="credit-balance-icon" aria-hidden="true">◎</span>
           <span className="credit-balance-copy"><span>Credit balance{dailyAvailable && <em className="credit-balance-flag"> • Daily reward ready</em>}</span><strong>{formatCredits(user.wallet.current)} credits</strong></span>
         </button>
+
         <button className="profile-shortcut" type="button" onClick={() => setPage('profile')} title="Open profile">
           <Avatar text={user.avatar} />
           <span className="profile-shortcut-copy"><strong>{user.username}</strong><small>{level.name}</small></span>
