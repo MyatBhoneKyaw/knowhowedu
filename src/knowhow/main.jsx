@@ -4152,6 +4152,31 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
           </div>
         </section>
       </div>
+      {chatProfileOpen && activeProfile && (
+        <div className="modal-backdrop high-modal-backdrop" onClick={() => setChatProfileOpen(false)}>
+          <div className="modal card search-profile-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="section-title">
+              <h3>User Profile</h3>
+              <button className="ghost" type="button" onClick={() => setChatProfileOpen(false)}>Close</button>
+            </div>
+            <div className="profile-head">
+              <Avatar text={activeProfile.avatar || getInitials(activeProfile.fullName || activeContact)} large />
+              <div>
+                <h2>{activeProfile.fullName || activeContact}</h2>
+                <p>@{activeProfile.username || '—'} • {activeProfile.region || 'Region hidden'}</p>
+                {activeProfile.role && <p className="muted-text">{activeProfile.role}</p>}
+              </div>
+            </div>
+            {activeProfile.bio && <p>{activeProfile.bio}</p>}
+            {(activeProfile.languages?.length || activeProfile.interests?.length) ? (
+              <div className="pill-wrap left">
+                {(activeProfile.languages || []).map((item) => <span className="pill muted" key={`lang-${item}`}>{item}</span>)}
+                {(activeProfile.interests || []).map((item) => <span className="pill" key={`int-${item}`}>{item}</span>)}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
