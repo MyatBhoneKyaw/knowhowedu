@@ -4382,7 +4382,7 @@ function SettingsPage({ user, setUser, onLogout }) {
   return (
     <section className="settings-desktop-page">
       <div className="settings-window card">
-        <div className="settings-quick-actions"><button className="ghost" type="button" onClick={() => setSettingsNotice('Switch account is ready for a multi-account version.')}>⇄ Switch Account</button><button className="ghost" type="button" onClick={onLogout}>↪ Log Out</button></div>
+        <div className="settings-quick-actions"><button className="ghost" type="button" onClick={onLogout}>↪ Log Out</button></div>
         <div className="settings-window-body">
           <aside className="settings-left-menu">
             {(filteredSections.length ? filteredSections : sections).map((item) => <button key={item.id} type="button" className={activeSection === item.id ? 'active' : ''} onClick={() => setActiveSection(item.id)}><span>{item.icon}</span>{item.label}</button>)}
