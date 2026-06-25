@@ -3281,23 +3281,10 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
 
 
 
-function TeacherBookingPreview({ form, sessions, user }) {
-  const durationMinutes = Math.max(1, Number(form.durationMinutes) || 0);
-  const selectedTeacher = null;
-  const rateInfo = { rate: CREDIT_PER_MINUTE, label: 'Teacher-created session • standard time credit pricing', level: user.teacherLevel || user.role || 'Approved Teacher' };
-  const seatInfo = null;
-  const credits = minutesToCredits(durationMinutes);
-  return (
-    <div className="notice booking-preview">
-      <strong>Credit preview:</strong> {getCreditTableLabel(durationMinutes)}. Your balance: {formatCredits(normalizeWallet(user.wallet).current)} credits.
-      <span>{rateInfo.label}. Credit is calculated from verified session time: 60 minutes = 1 credit.</span>
-      {seatInfo && <span className={seatInfo.full ? 'seat-full' : 'seat-open'}>{seatInfo.full ? `This teacher is full: 0/${seatInfo.limit} seats available.` : `Teacher seats available: ${seatInfo.available}/${seatInfo.limit}.`}</span>}
-      <div className="credit-price-strip">
-        {CREDIT_PRICE_TABLE.map((item) => <span key={item.minutes}>{item.minutes}m = {formatCredits(item.credits)}</span>)}
-      </div>
-    </div>
-  );
+function TeacherBookingPreview() {
+  return null;
 }
+
 
 function LiveAttendanceSummary({ activeMeeting }) {
   const [tick, setTick] = useState(Date.now());
