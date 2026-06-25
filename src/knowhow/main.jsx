@@ -665,8 +665,9 @@ async function apiRequest(path, options = {}) {
   // Sessions
   if (path === '/sessions/request' && method === 'POST') return createSession(body);
   if (path === '/sessions/my' && method === 'GET') return listMySessions();
+  if (path === '/sessions/feed' && method === 'GET') return listActiveSessions();
   if ((r = m(/^\/sessions\/([^/]+)\/status$/)) && method === 'PATCH') return updateSessionStatus(r[1], body);
-  if ((r = m(/^\/sessions\/([^/]+)\/meeting\/join$/)) && method === 'POST') return joinSessionSeat(r[1]);
+  if ((r = m(/^\/sessions\/([^/]+)\/meeting\/join$/)) && method === 'POST') return joinSessionSeat(r[1], body);
   if ((r = m(/^\/sessions\/([^/]+)$/)) && method === 'GET') {
     const { data, error } = await supabase.from('sessions').select('*').eq('id', r[1]).maybeSingle();
     return camel(ok(data, error));
