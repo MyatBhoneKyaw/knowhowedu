@@ -2889,7 +2889,18 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
   const [paymentProduct, setPaymentProduct] = useState(null);
   const [paymentDraft, setPaymentDraft] = useState({ name: '', cardNumber: '', expiry: '', cvv: '' });
   const [paymentError, setPaymentError] = useState('');
+  const subKey = `knowhow:subscription:${user?.id || 'guest'}`;
+  const [subState, setSubState] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(subKey) || 'null') || { plan: 'Free', expiresAt: null, lastTrialAt: null }; }
+    catch { return { plan: 'Free', expiresAt: null, lastTrialAt: null }; }
+  });
+  useEffect(() => { try { localStorage.setItem(subKey, JSON.stringify(subState)); } catch {} }, [subKey, subState]);
+  const nowTs = Date.now();
+  const activePlan = (subState.expiresAt && subState.expiresAt < nowTs) ? 'Free' : (subState.plan || 'Free');
+  const trialCooldownUntil = subState.lastTrialAt ? subState.lastTrialAt + 30 * 86400000 : 0;
+  const trialOnCooldown = trialCooldownUntil > nowTs;
   const wallet = normalizeWallet(user.wallet);
+
   const dailyKey = `knowhow:dailyReward:${user.id}`;
   const [dailyState, setDailyState] = useState(() => {
     try { return JSON.parse(localStorage.getItem(dailyKey) || 'null') || { lastClaim: '', streak: 0 }; }
