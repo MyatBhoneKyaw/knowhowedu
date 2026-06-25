@@ -3192,9 +3192,8 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
           })}
         </div>
       </div>
-
-      </div>
       <details className="card credit-history-card" open>
+
         <summary className="section-title" style={{ cursor: 'pointer', listStyle: 'none' }}>
           <h3 style={{ display: 'inline' }}>Credit History</h3>
           <label className="history-filter-label" onClick={(e) => e.stopPropagation()}>
