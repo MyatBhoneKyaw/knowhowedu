@@ -3352,8 +3352,22 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
 
     // 2) Settle verified-minute deltas per learner. Verified minutes = overlap where at
     //    least 1 mentor AND that learner were both present; auto-pauses otherwise.
-    const session = afterLeave || activeMeeting;
+    let session = afterLeave || activeMeeting;
     const isCloud = session.id && session.teacherId && (session.fromCloud || session.cloudId || /^[0-9a-f-]{36}$/i.test(String(session.id)));
+    // Sync this leave to the cloud BEFORE settlement so attendance reflects every participant.
+    if (isCloud) {
+      try {
+        const { data, error } = await supabase.rpc('session_attendance_leave', { _session_id: session.id, _user_name: user.fullName });
+        if (error) throw error;
+        const merged = cloudToLocalSession(data);
+        if (merged) {
+          session = { ...session, ...merged };
+          setSessions((curr) => curr.map((s) => (s.id === merged.id ? { ...s, ...merged } : s)));
+        }
+      } catch (err) {
+        setSessionNotice(`Leave sync failed: ${err.message || err}. Settling with local attendance.`);
+      }
+    }
     const ratePerMinute = getSessionCreditRate(session);
     const settledMap = { ...(session.settledMinutesByLearner || {}) };
     const joinedSeats = (session.joinedSeats || []).filter((s) => s.userId && s.userId !== session.teacherId);
