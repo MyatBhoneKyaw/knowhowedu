@@ -4106,12 +4106,12 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
           recipientId,
           body: body || attachmentLabel(attachment),
           messageType: composerMode === 'schedule' ? 'schedule' : 'private',
-          attachments: attachment || null,
+          attachments: attachment || {},
         },
       }).then((saved) => {
         if (!saved?.id) return;
         setMessages((current) => current.map((m) => m.id === tempId ? { ...m, id: saved.id, cloudId: saved.id, createdAt: saved.createdAt || new Date().toISOString() } : m));
-      }).catch(() => { /* keep optimistic */ });
+      }).catch((err) => { console.warn('sendMessage failed', err); });
     }
   }
 
