@@ -2637,7 +2637,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
       }),
     };
     const nextState = { lastClaim: today, streak: nextStreak };
-    try { localStorage.setItem(dailyKey, JSON.stringify(nextState)); } catch {}
+    try { localStorage.setItem(dailyKey, JSON.stringify(nextState)); window.dispatchEvent(new Event('daily-reward-updated')); } catch {}
     setDailyState(nextState);
     addTransaction('Daily Reward', `Day ${nextStreak} streak bonus`, rewardAmount, nextUser);
     setWalletNotice(`Daily reward claimed: +${rewardAmount} credits. Streak: ${nextStreak} day${nextStreak === 1 ? '' : 's'}.`);
