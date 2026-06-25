@@ -4725,14 +4725,11 @@ function SettingsPage({ user, setUser, onLogout }) {
     }
 
     if (activeSection === 'billing') {
-      const paymentMethods = [
-        { name: 'Primary card', detail: 'Visa •••• 4242', status: 'Default' },
-        { name: 'Backup wallet', detail: 'Know-how credits balance', status: `${formatCredits(user.wallet?.current || 0)} credits` },
-      ];
       const invoices = [
         { date: '2026-06-01', title: 'Monthly subscription', amount: subscriptionPlan === 'Premium' ? '$6.99 demo' : '$0 demo', status: 'Paid' },
         { date: '2026-05-01', title: 'Lecture access pass', amount: '$9 demo', status: 'Paid' },
       ];
+      const primary = paymentMethods[0];
       return (
         <div className="settings-panel-card billing-settings-panel">
           <div className="settings-section-head">
@@ -4741,10 +4738,25 @@ function SettingsPage({ user, setUser, onLogout }) {
           </div>
           <div className="billing-hero-grid">
             <div className="billing-payment-card">
-              <span>Default payment method</span>
-              <strong>Visa •••• 4242</strong>
-              <small>Expires 12/29 • used for Premium and paid lecture videos</small>
-              <div className="billing-action-row"><button className="ghost" type="button" onClick={() => setSettingsNotice('Payment method editor opened in demo mode.')}>Edit Payment</button><button className="ghost" type="button" onClick={() => setSettingsNotice('New payment method flow opened.')}>Add Method</button></div>
+              <span>Your payment method</span>
+              {primary ? (
+                <>
+                  <strong>{primary.brand} •••• {primary.last4}</strong>
+                  <small>Expires {primary.expiry} • used for Premium and paid lecture videos</small>
+                  <div className="billing-action-row">
+                    <button className="ghost" type="button" onClick={() => openEditPayment(0)}>Edit Payment</button>
+                    <button className="ghost" type="button" onClick={openAddPayment}>Add Method</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <strong>No payment method</strong>
+                  <small>Add a card to subscribe to Premium or buy lecture videos.</small>
+                  <div className="billing-action-row">
+                    <button className="ghost" type="button" onClick={openAddPayment}>Add Method</button>
+                  </div>
+                </>
+              )}
             </div>
             <div className="billing-plan-card upgraded-billing-card">
               <span>Credit wallet</span>
@@ -4753,9 +4765,45 @@ function SettingsPage({ user, setUser, onLogout }) {
             </div>
           </div>
           <div className="billing-info-grid">
-            <div className="settings-sub-card"><div className="settings-section-head small"><h3>Payment Methods</h3><button className="ghost" type="button" onClick={() => setSettingsNotice('Payment methods updated.')}>Manage</button></div>{paymentMethods.map((method) => <div className="settings-row compact-row" key={method.name}><span><strong>{method.name}</strong><small>{method.detail}</small></span><b>{method.status}</b></div>)}</div>
+            <div className="settings-sub-card">
+              <div className="settings-section-head small"><h3>Payment Methods</h3><button className="ghost" type="button" onClick={openAddPayment}>Add Method</button></div>
+              {paymentMethods.length === 0 ? (
+                <div className="settings-row compact-row"><span><small>No payment methods saved yet.</small></span></div>
+              ) : paymentMethods.map((method, i) => (
+                <div className="settings-row compact-row" key={`${method.brand}-${method.last4}-${i}`}>
+                  <span><strong>{method.brand} •••• {method.last4}</strong><small>Expires {method.expiry}{i === 0 ? ' • Primary' : ''}</small></span>
+                  <button className="ghost" type="button" onClick={() => openEditPayment(i)}>Edit</button>
+                  <button className="ghost" type="button" onClick={() => removePaymentMethod(i)}>Remove</button>
+                </div>
+              ))}
+            </div>
             <div className="settings-sub-card"><div className="settings-section-head small"><h3>Recent Invoices</h3><button className="ghost" type="button" onClick={() => setSettingsNotice('Invoice download started in demo mode.')}>Download</button></div>{invoices.map((invoice) => <div className="settings-row compact-row" key={invoice.date}><span><strong>{invoice.title}</strong><small>{invoice.date}</small></span><span>{invoice.amount}</span><b>{invoice.status}</b></div>)}</div>
           </div>
+          {paymentModal && (
+            <div className="modal-backdrop" onClick={() => setPaymentModal(null)}>
+              <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                <h3>{paymentModal.mode === 'edit' ? 'Edit Payment Method' : 'Add Payment Method'}</h3>
+                <label className="field-label">Card brand
+                  <select value={paymentModal.draft.brand} onChange={(e) => setPaymentModal({ ...paymentModal, draft: { ...paymentModal.draft, brand: e.target.value } })}>
+                    <option>Visa</option><option>Mastercard</option><option>Amex</option><option>Discover</option>
+                  </select>
+                </label>
+                <label className="field-label">Cardholder name
+                  <input type="text" value={paymentModal.draft.holder} onChange={(e) => setPaymentModal({ ...paymentModal, draft: { ...paymentModal.draft, holder: e.target.value } })} />
+                </label>
+                <label className="field-label">Last 4 digits
+                  <input type="text" maxLength={4} value={paymentModal.draft.last4} onChange={(e) => setPaymentModal({ ...paymentModal, draft: { ...paymentModal.draft, last4: e.target.value.replace(/\D/g, '').slice(0, 4) } })} placeholder="4242" />
+                </label>
+                <label className="field-label">Expiry (MM/YY)
+                  <input type="text" maxLength={5} value={paymentModal.draft.expiry} onChange={(e) => setPaymentModal({ ...paymentModal, draft: { ...paymentModal.draft, expiry: e.target.value } })} placeholder="12/29" />
+                </label>
+                <div className="billing-action-row" style={{ marginTop: 12 }}>
+                  <button className="ghost" type="button" onClick={() => setPaymentModal(null)}>Cancel</button>
+                  <button className="primary" type="button" onClick={savePaymentModal}>{paymentModal.mode === 'edit' ? 'Save' : 'Add'}</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
