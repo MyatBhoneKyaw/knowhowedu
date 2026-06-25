@@ -3565,25 +3565,28 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
 
 
       {activeMeeting && (
-        <div className="modal-backdrop">
-          <div className="modal card meeting-room">
+        <div className="modal-backdrop meeting-backdrop">
+          <div className="modal card meeting-room" ref={meetingRoomRef}>
             <div className="section-title">
               <h2>Know-how Meeting Room</h2>
-              <StatusBadge status="Ongoing" />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <StatusBadge status="Ongoing" />
+                <button className="ghost" type="button" onClick={toggleMeetingFullscreen}>⛶ Fullscreen</button>
+              </div>
             </div>
             <div className="call-box video-call-box">
               <div className="video-call-header">
                 <div><h3>{activeMeeting.topic}</h3><p>Room: {buildJitsiRoomName(getSessionRoom(activeMeeting))}</p></div>
-                <a className="primary small-link" href={activeMeeting.meetingLink || buildMeetingUrl(getSessionRoom(activeMeeting))} target="_blank" rel="noreferrer">Open call tab</a>
               </div>
               <iframe
                 className="jitsi-frame"
                 title={`Session room ${getSessionRoom(activeMeeting)}`}
                 src={activeMeeting.meetingLink || buildMeetingUrl(getSessionRoom(activeMeeting))}
                 allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+                allowFullScreen
               />
             </div>
-            <p className="muted-text">You joined as {getParticipantRole(activeMeeting, user)}. Both devices must use this same saved meeting link. Screen share is available inside the call toolbar.</p>
+            <p className="muted-text">You joined as {getParticipantRole(activeMeeting, user)}. Credits are settled automatically when you leave, based on verified overlap minutes (only counted when at least one mentor and one learner are both in the room).</p>
             <LiveAttendanceSummary activeMeeting={activeMeeting} />
             <button className="danger full" onClick={leaveMeeting}>Leave Meeting</button>
           </div>
