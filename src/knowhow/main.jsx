@@ -3036,6 +3036,8 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [showDialog, setShowDialog] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
+  const [sessionEndAd, setSessionEndAd] = useState(null);
+
   const meetingRoomRef = useRef(null);
   function toggleMeetingFullscreen() {
     const el = meetingRoomRef.current;
