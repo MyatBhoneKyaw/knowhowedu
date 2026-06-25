@@ -4681,37 +4681,40 @@ function VideoPanelPage({ user, setUser }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeVideo, setActiveVideo] = useState(null);
   const [videoNotice, setVideoNotice] = useState('');
+  const [view, setView] = useState('browse');
   const purchasedVideos = user.purchasedVideos || [];
   const categories = ['All', ...Array.from(new Set(LECTURE_VIDEOS.map((video) => video.category)))];
   const normalizedSearch = normalizeText(videoSearch);
-  const filteredVideos = LECTURE_VIDEOS.filter((video) => {
+  const baseList = view === 'owned' ? LECTURE_VIDEOS.filter((video) => purchasedVideos.includes(video.id)) : LECTURE_VIDEOS;
+  const filteredVideos = baseList.filter((video) => {
     const categoryOkay = selectedCategory === 'All' || video.category === selectedCategory;
     const searchOkay = !normalizedSearch || normalizeText([video.title, video.teacher, video.category, video.level, video.description].join(' ')).includes(normalizedSearch);
     return categoryOkay && searchOkay;
   });
 
-  function hasAccess(video) {
-    return video.priceCredits === 0 || purchasedVideos.includes(video.id);
+  function isOwned(video) {
+    return purchasedVideos.includes(video.id);
   }
 
-  function buyVideo(video) {
+  function claimOrBuy(video) {
     setVideoNotice('');
-    if (hasAccess(video)) {
+    if (isOwned(video)) {
       setActiveVideo(video);
       return;
     }
     const currentCredits = Number(user.wallet?.current || 0);
-    if (currentCredits < video.priceCredits) {
+    if (video.priceCredits > 0 && currentCredits < video.priceCredits) {
       setVideoNotice(`You need ${formatCredits(video.priceCredits)} credits to unlock this lecture.`);
       return;
     }
+    const nextCurrent = video.priceCredits > 0 ? Number((currentCredits - video.priceCredits).toFixed(4)) : currentCredits;
     const nextUser = {
       ...user,
       purchasedVideos: [...purchasedVideos, video.id],
-      wallet: normalizeWallet({ ...user.wallet, current: Number((currentCredits - video.priceCredits).toFixed(4)), lectureAccess: Number(user.wallet?.lectureAccess || 0) + 1 }),
+      wallet: normalizeWallet({ ...user.wallet, current: nextCurrent, lectureAccess: Number(user.wallet?.lectureAccess || 0) + 1 }),
     };
     setUser(nextUser);
-    setVideoNotice(`${video.title} unlocked. You can watch it now.`);
+    setVideoNotice(`${video.title} added to your Own Videos.`);
   }
 
   return (
@@ -4719,29 +4722,39 @@ function VideoPanelPage({ user, setUser }) {
       <header className="community-directory-header community-feed-header">
         <div>
           <h2>Video</h2>
-          
         </div>
-        
       </header>
       <div className="video-toolbar card">
+        <div className="community-category-tabs video-tabs" style={{ marginBottom: 8 }}>
+          <button className={view === 'browse' ? 'active' : ''} type="button" onClick={() => setView('browse')}>Browse</button>
+          <button className={view === 'owned' ? 'active' : ''} type="button" onClick={() => setView('owned')}>Own Videos ({purchasedVideos.length})</button>
+        </div>
         <label className="community-search-box"><span>⌕</span><input value={videoSearch} onChange={(event) => setVideoSearch(event.target.value)} placeholder="Search lecture videos..." /></label>
         <div className="community-category-tabs video-tabs">{categories.map((category) => <button key={category} className={selectedCategory === category ? 'active' : ''} type="button" onClick={() => setSelectedCategory(category)}>{category}</button>)}</div>
       </div>
       {videoNotice && <div className="notice compact-notice">{videoNotice}</div>}
+      {view === 'owned' && filteredVideos.length === 0 && (
+        <div className="card" style={{ padding: 20, textAlign: 'center' }}><p className="muted-text">You haven't claimed any videos yet. Browse and claim free lectures or purchase premium ones to see them here.</p></div>
+      )}
       <div className="video-grid">
         {filteredVideos.map((video) => {
-          const unlocked = hasAccess(video);
+          const owned = isOwned(video);
+          const isFree = video.priceCredits === 0;
+          let label;
+          if (owned) label = 'Watch';
+          else if (isFree) label = 'Claim';
+          else label = 'Buy';
           return (
             <article className="card video-card" key={video.id}>
-              <div className="video-thumb"><span>▶</span><b>{video.badge}</b></div>
+              <div className="video-thumb"><span>▶</span><b>{owned ? 'Owned' : video.badge}</b></div>
               <div className="video-card-body">
                 <div className="post-meta"><span>{video.category}</span><span>{video.duration}</span><span>{video.level}</span></div>
                 <h3>{video.title}</h3>
                 <p>{video.description}</p>
                 <MiniPill title="Teacher" text={video.teacher} />
                 <div className="video-card-actions">
-                  <strong>{video.priceCredits === 0 ? 'Free' : `${formatCredits(video.priceCredits)} credits`}</strong>
-                  {unlocked ? <button className="primary" type="button" onClick={() => setActiveVideo(video)}>Watch</button> : <button className="primary" type="button" onClick={() => buyVideo(video)}>Buy</button>}
+                  <strong>{isFree ? 'Free' : `${formatCredits(video.priceCredits)} credits`}</strong>
+                  <button className="primary" type="button" onClick={() => claimOrBuy(video)}>{label}</button>
                 </div>
               </div>
             </article>
