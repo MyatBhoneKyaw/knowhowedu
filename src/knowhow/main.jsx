@@ -2844,7 +2844,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
   );
 }
 
-function SessionsPage({ user, setUser, sessions, setSessions, transactions, setTransactions }) {
+function SessionsPage({ user, setUser, sessions, setSessions, transactions, setTransactions, setPage }) {
   const [showDialog, setShowDialog] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
