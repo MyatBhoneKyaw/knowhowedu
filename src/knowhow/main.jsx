@@ -3195,8 +3195,8 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
                   );
                 })()}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Accepted')}>Accept</button>}
-                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Rescheduled')}>Reschedule</button>}
-                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => updateStatus(session.id, 'Cancelled')} disabled={session.status === 'Cancelled' || session.status === 'Completed'}>Cancel</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => openReschedule(session)}>Reschedule</button>}
+                {canTeach && role === 'mentor' && <button className="ghost" onClick={() => cancelSession(session)}>Cancel</button>}
                 {canTeach && role === 'mentor' && <button className="primary" onClick={() => completeSession(session)} disabled={session.status === 'Cancelled'}>Complete</button>}
               </div>
             </div>
