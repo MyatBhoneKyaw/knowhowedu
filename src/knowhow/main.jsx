@@ -4244,7 +4244,7 @@ function VideoPanelPage({ user, setUser }) {
       <header className="community-directory-header community-feed-header">
         <div>
           <h2>Video</h2>
-          <p>Buy teacher-posted lectures with credits, or watch free learning videos.</p>
+          
         </div>
         
       </header>
