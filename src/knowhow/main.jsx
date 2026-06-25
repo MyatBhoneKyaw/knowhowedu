@@ -4527,6 +4527,53 @@ function SettingsPage({ user, setUser, onLogout }) {
   const [settingsNotice, setSettingsNotice] = useState('');
   const [feedback, setFeedback] = useState('');
   const [subscriptionPlan, setSubscriptionPlan] = useState('Free');
+  const paymentStorageKey = `knowhow:payment-methods:${user?.id || 'guest'}`;
+  const [paymentMethods, setPaymentMethods] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(paymentStorageKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const [paymentModal, setPaymentModal] = useState(null); // null | { mode: 'add' | 'edit', index, draft }
+  useEffect(() => {
+    try { window.localStorage.setItem(paymentStorageKey, JSON.stringify(paymentMethods)); } catch {}
+  }, [paymentStorageKey, paymentMethods]);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(paymentStorageKey);
+      setPaymentMethods(raw ? JSON.parse(raw) : []);
+    } catch { setPaymentMethods([]); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  function openAddPayment() {
+    setPaymentModal({ mode: 'add', index: -1, draft: { brand: 'Visa', last4: '', expiry: '', holder: user?.name || '' } });
+  }
+  function openEditPayment(index) {
+    const m = paymentMethods[index];
+    if (!m) return;
+    setPaymentModal({ mode: 'edit', index, draft: { ...m } });
+  }
+  function savePaymentModal() {
+    const d = paymentModal?.draft;
+    if (!d) return;
+    const last4 = (d.last4 || '').replace(/\D/g, '').slice(-4);
+    if (last4.length !== 4) { setSettingsNotice('Enter the last 4 digits of the card.'); return; }
+    if (!/^\d{2}\/\d{2}$/.test(d.expiry || '')) { setSettingsNotice('Expiry must be in MM/YY format.'); return; }
+    const next = { brand: d.brand || 'Card', last4, expiry: d.expiry, holder: d.holder || '' };
+    setPaymentMethods((curr) => {
+      const copy = [...curr];
+      if (paymentModal.mode === 'edit' && paymentModal.index >= 0) copy[paymentModal.index] = next;
+      else copy.push(next);
+      return copy;
+    });
+    setPaymentModal(null);
+    setSettingsNotice(paymentModal.mode === 'edit' ? 'Payment method updated.' : 'Payment method added.');
+  }
+  function removePaymentMethod(index) {
+    setPaymentMethods((curr) => curr.filter((_, i) => i !== index));
+    setSettingsNotice('Payment method removed.');
+  }
 
   const sections = [
     { id: 'profile', label: 'Profile', icon: '👤' },
