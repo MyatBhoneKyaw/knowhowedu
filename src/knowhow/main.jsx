@@ -4830,10 +4830,15 @@ function VideoPanelPage({ user, setUser }) {
   const [activeVideo, setActiveVideo] = useState(null);
   const [videoNotice, setVideoNotice] = useState('');
   const [view, setView] = useState('browse');
+  const [uploadedVideos, setUploadedVideos] = useState([]);
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadForm, setUploadForm] = useState({ title: '', description: '', category: 'Design', level: 'Beginner', durationLabel: '15 min', priceCredits: 0, videoUrl: '', file: null });
+  const isTeacher = canUserTeach(user);
   const purchasedVideos = user.purchasedVideos || [];
-  const categories = ['All', ...Array.from(new Set(LECTURE_VIDEOS.map((video) => video.category)))];
+  const allVideos = [...uploadedVideos, ...LECTURE_VIDEOS];
+  const categories = ['All', ...Array.from(new Set(allVideos.map((video) => video.category)))];
   const normalizedSearch = normalizeText(videoSearch);
-  const baseList = view === 'owned' ? LECTURE_VIDEOS.filter((video) => purchasedVideos.includes(video.id)) : LECTURE_VIDEOS;
+  const baseList = view === 'owned' ? allVideos.filter((video) => purchasedVideos.includes(video.id)) : allVideos;
   const filteredVideos = baseList.filter((video) => {
     const categoryOkay = selectedCategory === 'All' || video.category === selectedCategory;
     const searchOkay = !normalizedSearch || normalizeText([video.title, video.teacher, video.category, video.level, video.description].join(' ')).includes(normalizedSearch);
@@ -4865,12 +4870,47 @@ function VideoPanelPage({ user, setUser }) {
     setVideoNotice(`${video.title} added to your Own Videos.`);
   }
 
+  function submitUpload(event) {
+    event.preventDefault();
+    if (!isTeacher) return;
+    if (!uploadForm.title.trim()) { setVideoNotice('Please enter a title for your video.'); return; }
+    let videoUrl = uploadForm.videoUrl.trim();
+    let poster = '';
+    if (!videoUrl && uploadForm.file) {
+      videoUrl = URL.createObjectURL(uploadForm.file);
+    }
+    if (!videoUrl) { setVideoNotice('Please upload a file or paste a video URL.'); return; }
+    const newVideo = {
+      id: `uploaded-${Date.now()}`,
+      title: uploadForm.title.trim(),
+      description: uploadForm.description.trim() || 'Teacher-uploaded lecture.',
+      category: uploadForm.category,
+      level: uploadForm.level,
+      durationLabel: uploadForm.durationLabel || '—',
+      priceCredits: Number(uploadForm.priceCredits) || 0,
+      teacher: user.fullName,
+      videoUrl,
+      poster,
+    };
+    setUploadedVideos((prev) => [newVideo, ...prev]);
+    setUser({ ...user, purchasedVideos: [...purchasedVideos, newVideo.id] });
+    setShowUpload(false);
+    setUploadForm({ title: '', description: '', category: 'Design', level: 'Beginner', durationLabel: '15 min', priceCredits: 0, videoUrl: '', file: null });
+    setVideoNotice(`"${newVideo.title}" uploaded successfully.`);
+    setView('owned');
+  }
+
   return (
     <section className="video-panel-page">
-      <header className="community-directory-header community-feed-header">
+      <header className="community-directory-header community-feed-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h2>Video</h2>
         </div>
+        {isTeacher && (
+          <button type="button" className="primary" onClick={() => setShowUpload(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span aria-hidden>⬆</span> Upload Video
+          </button>
+        )}
       </header>
       <div className="video-toolbar card">
         <div className="community-category-tabs video-tabs" style={{ marginBottom: 8 }}>
@@ -4884,6 +4924,34 @@ function VideoPanelPage({ user, setUser }) {
       {view === 'owned' && filteredVideos.length === 0 && (
         <div className="card" style={{ padding: 20, textAlign: 'center' }}><p className="muted-text">You haven't claimed any videos yet. Browse and claim free lectures or purchase premium ones to see them here.</p></div>
       )}
+      {showUpload && (
+        <div className="modal-backdrop" onClick={() => setShowUpload(false)}>
+          <div className="modal card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>Upload Video</h3>
+              <button type="button" className="ghost" onClick={() => setShowUpload(false)}>✕</button>
+            </header>
+            <form onSubmit={submitUpload} style={{ display: 'grid', gap: 10 }}>
+              <label>Title<input required value={uploadForm.title} onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })} placeholder="e.g. Intro to UI Design" /></label>
+              <label>Description<textarea rows={3} value={uploadForm.description} onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })} placeholder="What will learners take away?" /></label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label>Category<select value={uploadForm.category} onChange={(e) => setUploadForm({ ...uploadForm, category: e.target.value })}>{['Design','Language','Programming','Creative','Business','Other'].map(c => <option key={c}>{c}</option>)}</select></label>
+                <label>Level<select value={uploadForm.level} onChange={(e) => setUploadForm({ ...uploadForm, level: e.target.value })}>{['Beginner','Intermediate','Advanced','N5','N4'].map(c => <option key={c}>{c}</option>)}</select></label>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label>Duration<input value={uploadForm.durationLabel} onChange={(e) => setUploadForm({ ...uploadForm, durationLabel: e.target.value })} placeholder="e.g. 18 min" /></label>
+                <label>Price (credits)<input type="number" min="0" step="0.25" value={uploadForm.priceCredits} onChange={(e) => setUploadForm({ ...uploadForm, priceCredits: e.target.value })} /></label>
+              </div>
+              <label>Video file<input type="file" accept="video/*" onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files?.[0] || null })} /></label>
+              <label>…or paste a video URL<input value={uploadForm.videoUrl} onChange={(e) => setUploadForm({ ...uploadForm, videoUrl: e.target.value })} placeholder="https://..." /></label>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                <button type="button" className="ghost" onClick={() => setShowUpload(false)}>Cancel</button>
+                <button type="submit" className="primary">Publish</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <div className="video-grid">
         {filteredVideos.map((video) => {
           const owned = isOwned(video);
@@ -4893,6 +4961,7 @@ function VideoPanelPage({ user, setUser }) {
           else if (isFree) label = 'Claim';
           else label = 'Buy';
           return (
+
             <article className="card video-card" key={video.id}>
               <div className="video-thumb" style={video.poster ? { backgroundImage: `url(${video.poster})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}><span>▶</span><b>{owned ? 'Owned' : video.badge}</b></div>
               <div className="video-card-body">
