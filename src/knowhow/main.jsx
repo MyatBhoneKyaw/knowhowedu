@@ -1827,7 +1827,7 @@ function Dashboard({ user, level, sessions, setPage }) {
         <div>
           <p className="eyebrow">1 hour shared = 1 Time Credit</p>
           <h2>Learn without money. Teach with contribution.</h2>
-          <p>Know-how connects learners and mentors through fair skill exchange, Time Credits, search, and reputation.</p>
+          
           <div className="actions">
             <button className="primary" onClick={() => setPage('search')}>Search Teachers</button>
             <button className="ghost" onClick={() => setPage('sessions')}>Create Session</button>
