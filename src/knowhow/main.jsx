@@ -274,15 +274,328 @@ async function cloudAdminLogin(email, password) {
   return { token: data.session.access_token, user: { id: userId, email } };
 }
 
+// ---- helpers shared by dispatchers ----
+async function requireUid() {
+  const { data } = await supabase.auth.getSession();
+  const uid = data?.session?.user?.id;
+  if (!uid) throw new Error('Not authenticated');
+  return uid;
+}
+function ok(data, error) { if (error) throw new Error(error.message); return data; }
+function snake(obj) {
+  // shallow camel->snake for known fields
+  const map = {
+    userId: 'user_id', sessionId: 'session_id', recipientId: 'recipient_id', senderId: 'sender_id',
+    skillTopic: 'skill_topic', skillCategory: 'skill_category', teacherId: 'teacher_id',
+    learnerId: 'learner_id', requestedBy: 'requested_by', durationHours: 'duration_hours',
+    roomId: 'room_id', meetingLink: 'meeting_link', meetingProvider: 'meeting_provider',
+    meetingSpaceName: 'meeting_space_name', creditAmount: 'credit_amount',
+    teacherLevel: 'teacher_level', studentLimit: 'student_limit', seatsAvailable: 'seats_available',
+    experienceLevel: 'experience_level', sessionDuration: 'session_duration',
+    teachingLanguage: 'teaching_language', locationMode: 'location_mode',
+    learningGoals: 'learning_goals', targetProficiency: 'target_proficiency',
+    preferredLanguage: 'preferred_language', messageType: 'message_type',
+    fileUrl: 'file_url', groupName: 'group_name', postId: 'post_id', commentId: 'comment_id',
+    fromUser: 'from_user', toUser: 'to_user', skillOfferedId: 'skill_offered_id',
+    skillWantedId: 'skill_wanted_id', matchPercentage: 'match_percentage',
+    compatibilityScore: 'compatibility_score', isMutual: 'is_mutual',
+    productType: 'product_type', amountPaid: 'amount_paid', dueDate: 'due_date',
+    badgeRequested: 'badge_requested', evidenceUrl: 'evidence_url', isRead: 'is_read',
+    rewardCredits: 'reward_credits', linkedPostId: 'linked_post_id', tutorId: 'tutor_id',
+    solutionNote: 'solution_note',
+  };
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) out[map[k] || k] = v;
+  return out;
+}
+function camel(row) {
+  if (!row || typeof row !== 'object') return row;
+  if (Array.isArray(row)) return row.map(camel);
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    const ck = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    out[ck] = v;
+    if (k === 'id') out._id = v;
+  }
+  return out;
+}
+
+// ----- Skills -----
+async function listSkills(table) { return camel(ok(...(await supabase.from(table).select('*').order('created_at', { ascending: false }).then(r => [r.data, r.error])))); }
+async function createSkill(table, body) {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from(table).insert({ ...snake(body), user_id: uid }).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function updateSkill(table, id, body) {
+  const { data, error } = await supabase.from(table).update(snake(body)).eq('id', id).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function deleteSkill(table, id) {
+  const { error } = await supabase.from(table).delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return { success: true };
+}
+
+// ----- Sessions -----
+async function listMySessions() {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('sessions').select('*')
+    .or(`teacher_id.eq.${uid},learner_id.eq.${uid},requested_by.eq.${uid}`)
+    .order('date', { ascending: false });
+  return camel(ok(data, error));
+}
+async function createSession(body) {
+  const uid = await requireUid();
+  const row = snake(body);
+  row.requested_by = uid;
+  if (!row.room_id) row.room_id = `kh-${Math.random().toString(36).slice(2, 10)}`;
+  if (!row.teacher_id) row.teacher_id = uid;
+  const { data, error } = await supabase.from('sessions').insert(row).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function updateSessionStatus(id, body) {
+  if (body.status === 'completed') {
+    const { data, error } = await supabase.rpc('session_complete', { _session_id: id });
+    return camel(ok(data, error));
+  }
+  const { data, error } = await supabase.from('sessions').update(snake(body)).eq('id', id).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function joinSessionSeat(id) {
+  const { data, error } = await supabase.rpc('session_join_seat', { _session_id: id });
+  return camel(ok(data, error));
+}
+
+// ----- Messages -----
+async function listMessageThreads() {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('messages').select('*')
+    .or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
+    .order('created_at', { ascending: false }).limit(500);
+  return camel(ok(data, error));
+}
+async function listMessagesWith(otherId) {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('messages').select('*')
+    .or(`and(sender_id.eq.${uid},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${uid})`)
+    .order('created_at', { ascending: true });
+  return camel(ok(data, error));
+}
+async function sendMessage(body) {
+  const uid = await requireUid();
+  const row = snake(body); row.sender_id = uid;
+  const { data, error } = await supabase.from('messages').insert(row).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+
+// ----- Community -----
+async function listCommunityPosts(community) {
+  let q = supabase.from('community_posts').select('*, community_comments(*)').order('created_at', { ascending: false });
+  if (community) q = q.eq('community', community);
+  const { data, error } = await q;
+  return camel(ok(data, error));
+}
+async function createCommunityPost(body) {
+  const uid = await requireUid();
+  const row = snake(body); row.author_id = uid;
+  const { data, error } = await supabase.from('community_posts').insert(row).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function voteCommunity(postId) {
+  const uid = await requireUid();
+  await supabase.from('community_reactions').upsert({ post_id: postId, user_id: uid, value: 1 }, { onConflict: 'post_id,user_id' });
+  const { data, error } = await supabase.from('community_reactions').select('value').eq('post_id', postId);
+  if (error) throw new Error(error.message);
+  const votes = (data || []).reduce((s, r) => s + (r.value || 0), 0);
+  await supabase.from('community_posts').update({ votes }).eq('id', postId);
+  return { votes };
+}
+async function addCommunityComment(postId, body) {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('community_comments').insert({ post_id: postId, user_id: uid, body: body.body }).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+
+// ----- Wallet -----
+async function getMyWallet() {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('wallets').select('*').eq('user_id', uid).maybeSingle();
+  return walletRowToApiWallet(ok(data, error));
+}
+async function getWalletHistory() {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('credit_transactions').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+  return camel(ok(data, error));
+}
+async function walletLoan(body) { return walletRowToApiWallet(ok(...(await supabase.rpc('wallet_take_loan', { _amount: body.amount, _due: body.dueDate || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) }).then(r => [r.data, r.error])))); }
+async function walletRepay(body) { return walletRowToApiWallet(ok(...(await supabase.rpc('wallet_repay_loan', { _amount: body.amount }).then(r => [r.data, r.error])))); }
+async function walletPurchase(body) {
+  if (body.productType === 'lecture_video') {
+    return walletRowToApiWallet(ok(...(await supabase.rpc('wallet_purchase_lecture', { _amount: body.amountPaid || 0, _currency: body.currency || 'USD', _title: body.title || 'Lecture' }).then(r => [r.data, r.error]))));
+  }
+  return walletRowToApiWallet(ok(...(await supabase.rpc('wallet_purchase_credits', { _credits: body.credits || 0, _amount: body.amountPaid || 0, _currency: body.currency || 'USD', _title: body.title || 'Credits' }).then(r => [r.data, r.error]))));
+}
+
+// ----- Reviews -----
+async function createReview(body) {
+  const uid = await requireUid();
+  const row = snake(body); row.reviewer_id = uid;
+  const { data, error } = await supabase.from('reviews').insert(row).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function listUserReviews(userId) {
+  const { data, error } = await supabase.from('reviews').select('*').eq('reviewee_id', userId).order('created_at', { ascending: false });
+  return camel(ok(data, error));
+}
+
+// ----- Notifications -----
+async function listNotifications() {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+  return camel(ok(data, error));
+}
+async function markNotificationRead(id) {
+  const { data, error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+
+// ----- Matches -----
+async function recordSwipe(body) {
+  const uid = await requireUid();
+  const row = snake(body); row.from_user = uid;
+  const { data, error } = await supabase.from('matches').upsert(row, { onConflict: 'from_user,to_user' }).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+
+// ----- Quests -----
+async function listQuests() { return camel(ok(...(await supabase.from('quests').select('*').order('created_at', { ascending: false }).then(r => [r.data, r.error])))); }
+async function createQuest(body) {
+  const uid = await requireUid();
+  const row = snake(body); row.requester_id = uid;
+  const { data, error } = await supabase.from('quests').insert(row).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function acceptQuest(id) {
+  const uid = await requireUid();
+  const { data, error } = await supabase.from('quests').update({ tutor_id: uid, status: 'accepted' }).eq('id', id).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+async function completeQuest(id, body) {
+  const { data, error } = await supabase.from('quests').update({ status: 'completed', solution_note: body?.solutionNote, completed_at: new Date().toISOString() }).eq('id', id).select('*').maybeSingle();
+  return camel(ok(data, error));
+}
+
+// ----- Search / Users -----
+async function searchUsers(q) {
+  let query = supabase.from('profiles').select('id, full_name, username, email, profile, badges, xp, average_rating').limit(50);
+  if (q) query = query.or(`username.ilike.%${q}%,full_name.ilike.%${q}%`);
+  const { data, error } = await query;
+  return camel(ok(data, error));
+}
+async function getUserByUsername(username) {
+  const { data, error } = await supabase.from('profiles').select('*').eq('username', username).maybeSingle();
+  return camel(ok(data, error));
+}
+
+// =====================================================================
+// DISPATCHER
+// =====================================================================
 async function apiRequest(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const body = options.body ? JSON.parse(options.body) : undefined;
+  const m = (re) => path.match(re);
 
+  // Auth
   if (path === '/auth/login' && method === 'POST') return cloudSignIn(body.email, body.password);
   if (path === '/auth/register' && method === 'POST') return cloudSignUp(body);
   if (path === '/auth/me' && method === 'GET') return fetchMeFromCloud();
+
+  // Users / Profile
   if (path === '/users/me/profile' && method === 'PATCH') return cloudUpdateProfile(body);
+  if (path === '/users' && method === 'GET') return searchUsers(options.query);
+  let r;
+  if ((r = m(/^\/users\/([^/]+)$/)) && method === 'GET') return getUserByUsername(r[1]);
+
+  // Skills
+  if (path === '/skills/offered' && method === 'GET') return listSkills('skills_offered');
+  if (path === '/skills/offered' && method === 'POST') return createSkill('skills_offered', body);
+  if ((r = m(/^\/skills\/offered\/([^/]+)$/)) && method === 'PATCH') return updateSkill('skills_offered', r[1], body);
+  if ((r = m(/^\/skills\/offered\/([^/]+)$/)) && method === 'DELETE') return deleteSkill('skills_offered', r[1]);
+  if (path === '/skills/wanted' && method === 'GET') return listSkills('skills_wanted');
+  if (path === '/skills/wanted' && method === 'POST') return createSkill('skills_wanted', body);
+  if ((r = m(/^\/skills\/wanted\/([^/]+)$/)) && method === 'PATCH') return updateSkill('skills_wanted', r[1], body);
+  if ((r = m(/^\/skills\/wanted\/([^/]+)$/)) && method === 'DELETE') return deleteSkill('skills_wanted', r[1]);
+
+  // Sessions
+  if (path === '/sessions/request' && method === 'POST') return createSession(body);
+  if (path === '/sessions/my' && method === 'GET') return listMySessions();
+  if ((r = m(/^\/sessions\/([^/]+)\/status$/)) && method === 'PATCH') return updateSessionStatus(r[1], body);
+  if ((r = m(/^\/sessions\/([^/]+)\/meeting\/join$/)) && method === 'POST') return joinSessionSeat(r[1]);
+  if ((r = m(/^\/sessions\/([^/]+)$/)) && method === 'GET') {
+    const { data, error } = await supabase.from('sessions').select('*').eq('id', r[1]).maybeSingle();
+    return camel(ok(data, error));
+  }
+
+  // Messages
+  if (path === '/messages/threads' && method === 'GET') return listMessageThreads();
+  if (path === '/messages' && method === 'POST') return sendMessage(body);
+  if ((r = m(/^\/messages\/([^/]+)$/)) && method === 'GET') return listMessagesWith(r[1]);
+  if ((r = m(/^\/messages\/([^/]+)\/read$/)) && method === 'PATCH') {
+    const { data, error } = await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', r[1]).select('*').maybeSingle();
+    return camel(ok(data, error));
+  }
+
+  // Community
+  if (path === '/community' && method === 'GET') return listCommunityPosts(options.query);
+  if (path === '/community' && method === 'POST') return createCommunityPost(body);
+  if ((r = m(/^\/community\/([^/]+)\/vote$/)) && method === 'POST') return voteCommunity(r[1]);
+  if ((r = m(/^\/community\/([^/]+)\/comments$/)) && method === 'POST') return addCommunityComment(r[1], body);
+
+  // Wallet
+  if (path === '/wallet/me' && method === 'GET') return getMyWallet();
+  if (path === '/wallet/history' && method === 'GET') return getWalletHistory();
+  if (path === '/wallet/loan' && method === 'POST') return walletLoan(body);
+  if (path === '/wallet/loan/repay' && method === 'POST') return walletRepay(body);
+  if (path === '/wallet/purchase' && method === 'POST') return walletPurchase(body);
+
+  // Reviews
+  if (path === '/reviews' && method === 'POST') return createReview(body);
+  if ((r = m(/^\/reviews\/user\/([^/]+)$/)) && method === 'GET') return listUserReviews(r[1]);
+
+  // Notifications
+  if (path === '/notifications' && method === 'GET') return listNotifications();
+  if ((r = m(/^\/notifications\/([^/]+)\/read$/)) && method === 'PATCH') return markNotificationRead(r[1]);
+
+  // Matches
+  if (path === '/match/swipe' && method === 'POST') return recordSwipe(body);
+
+  // Quests
+  if (path === '/quests' && method === 'GET') return listQuests();
+  if (path === '/quests' && method === 'POST') return createQuest(body);
+  if ((r = m(/^\/quests\/([^/]+)\/accept$/)) && method === 'PATCH') return acceptQuest(r[1]);
+  if ((r = m(/^\/quests\/([^/]+)\/complete$/)) && method === 'PATCH') return completeQuest(r[1], body);
+
+  // Qualification (teacher applications)
   if (path === '/qualifications/teacher-applications' && method === 'POST') return cloudSubmitTeacherApplication(body);
+  if (path === '/qualifications/teacher-applications/me' && method === 'GET') {
+    const uid = await requireUid();
+    const { data, error } = await supabase.from('teacher_applications').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+    return camel(ok(data, error));
+  }
+
+  // Verification
+  if (path === '/verifications' && method === 'POST') {
+    const uid = await requireUid();
+    const row = snake(body); row.user_id = uid;
+    const { data, error } = await supabase.from('verification_requests').insert(row).select('*').maybeSingle();
+    return camel(ok(data, error));
+  }
+  if (path === '/verifications/me' && method === 'GET') {
+    const uid = await requireUid();
+    const { data, error } = await supabase.from('verification_requests').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+    return camel(ok(data, error));
+  }
 
   throw new Error(`Unsupported API route: ${method} ${path}`);
 }
@@ -290,6 +603,7 @@ async function apiRequest(path, options = {}) {
 async function adminApiRequest(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const body = options.body ? JSON.parse(options.body) : undefined;
+  const m = (re) => path.match(re);
 
   // Ensure the current session belongs to an admin.
   const { data: sessionData } = await supabase.auth.getSession();
@@ -298,9 +612,35 @@ async function adminApiRequest(path, options = {}) {
   const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', userId).eq('role', 'admin').maybeSingle();
   if (!roleRow) throw new Error('Admin privileges required.');
 
+  let r;
   if (path === '/admin/teacher-applications' && method === 'GET') return cloudListAdminApplications();
-  const reviewMatch = path.match(/^\/admin\/teacher-applications\/([^/]+)$/);
-  if (reviewMatch && method === 'PATCH') return cloudReviewApplication(reviewMatch[1], body);
+  if ((r = m(/^\/admin\/teacher-applications\/([^/]+)$/)) && method === 'PATCH') return cloudReviewApplication(r[1], body);
+
+  if (path === '/admin/stats' && method === 'GET') {
+    const [u, s, t, ap] = await Promise.all([
+      supabase.from('profiles').select('id', { count: 'exact', head: true }),
+      supabase.from('sessions').select('id', { count: 'exact', head: true }),
+      supabase.from('credit_transactions').select('id', { count: 'exact', head: true }),
+      supabase.from('teacher_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    ]);
+    return { users: u.count || 0, sessions: s.count || 0, transactions: t.count || 0, pendingApplications: ap.count || 0 };
+  }
+  if (path === '/admin/users' && method === 'GET') {
+    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(200);
+    return camel(ok(data, error));
+  }
+  if ((r = m(/^\/admin\/users\/([^/]+)\/suspend$/)) && method === 'PATCH') {
+    const { data, error } = await supabase.from('profiles').update({ is_suspended: !!body?.suspend }).eq('id', r[1]).select('*').maybeSingle();
+    return camel(ok(data, error));
+  }
+  if (path === '/admin/sessions' && method === 'GET') {
+    const { data, error } = await supabase.from('sessions').select('*').order('created_at', { ascending: false }).limit(200);
+    return camel(ok(data, error));
+  }
+  if (path === '/admin/transactions' && method === 'GET') {
+    const { data, error } = await supabase.from('credit_transactions').select('*').order('created_at', { ascending: false }).limit(200);
+    return camel(ok(data, error));
+  }
 
   throw new Error(`Unsupported admin API route: ${method} ${path}`);
 }
