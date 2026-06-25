@@ -2583,6 +2583,38 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
   const [paymentDraft, setPaymentDraft] = useState({ name: '', cardNumber: '', expiry: '', cvv: '' });
   const [paymentError, setPaymentError] = useState('');
   const wallet = normalizeWallet(user.wallet);
+  const dailyKey = `knowhow:dailyReward:${user.id}`;
+  const [dailyState, setDailyState] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(dailyKey) || 'null') || { lastClaim: '', streak: 0 }; }
+    catch { return { lastClaim: '', streak: 0 }; }
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const alreadyClaimed = dailyState.lastClaim === today;
+  const nextStreak = dailyState.lastClaim === yesterday ? Math.min((dailyState.streak || 0) + 1, 7) : 1;
+  const rewardAmount = Number((0.25 + (nextStreak - 1) * 0.05).toFixed(2));
+
+  function claimDailyReward() {
+    setWalletNotice('');
+    if (alreadyClaimed) {
+      setWalletNotice('Daily reward already claimed today. Come back tomorrow!');
+      return;
+    }
+    const nextUser = {
+      ...user,
+      wallet: normalizeWallet({
+        ...wallet,
+        current: Number((wallet.current + rewardAmount).toFixed(2)),
+        earned: Number(((wallet.earned || 0) + rewardAmount).toFixed(2)),
+      }),
+    };
+    const nextState = { lastClaim: today, streak: nextStreak };
+    try { localStorage.setItem(dailyKey, JSON.stringify(nextState)); } catch {}
+    setDailyState(nextState);
+    addTransaction('Daily Reward', `Day ${nextStreak} streak bonus`, rewardAmount, nextUser);
+    setWalletNotice(`Daily reward claimed: +${rewardAmount} credits. Streak: ${nextStreak} day${nextStreak === 1 ? '' : 's'}.`);
+  }
+
   const income = transactions.filter((item) => item.amount > 0 && item.type !== 'Loan' && item.type !== 'Purchase').reduce((sum, item) => sum + item.amount, 0);
   const spending = Math.abs(transactions.filter((item) => item.amount < 0).reduce((sum, item) => sum + item.amount, 0));
   const outstandingLoan = wallet.loanOutstanding || 0;
@@ -2725,6 +2757,21 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
         <StatCard label="Loan Balance" value={outstandingLoan} hint={wallet.loanDueDate ? `Due ${wallet.loanDueDate}` : 'No active loan'} />
       </div>
       {walletNotice && <div className="notice">{walletNotice}</div>}
+      <div className="card">
+        <h3>Daily Credit Reward</h3>
+        <p className="muted-text">Claim a free credit bonus every day. Keep your streak alive for bigger rewards (cap +0.55 at a 7-day streak).</p>
+        <div className="stats-grid">
+          <StatCard label="Current Streak" value={`${dailyState.streak || 0} day${(dailyState.streak || 0) === 1 ? '' : 's'}`} hint={alreadyClaimed ? `Last claimed ${dailyState.lastClaim}` : 'Claim today to grow it'} />
+          <StatCard label="Today's Reward" value={`+${rewardAmount}`} hint={alreadyClaimed ? 'Already claimed today' : `Day ${nextStreak} bonus available`} />
+          <StatCard label="Max Streak Bonus" value="+0.55" hint="Reach a 7-day streak" />
+        </div>
+        <div className="actions wrap">
+          <button className="primary" type="button" onClick={claimDailyReward} disabled={alreadyClaimed}>
+            {alreadyClaimed ? 'Claimed Today' : `Claim +${rewardAmount} Credits`}
+          </button>
+        </div>
+      </div>
+
       <div className="two-col">
         <div className="card">
           <h3>Loan Credit</h3>
