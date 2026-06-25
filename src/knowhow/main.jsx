@@ -4539,6 +4539,8 @@ function ProfilePage({ user, setUser, level, teacherApplications, setTeacherAppl
 function SettingsPage({ user, setUser, onLogout }) {
   const [activeSection, setActiveSection] = useState('security');
   const [settingsSearch, setSettingsSearch] = useState('');
+  const [language, setLanguage] = useState(() => (typeof window !== 'undefined' && window.localStorage.getItem('knowhow-language')) || 'English');
+
   const [draft, setDraft] = useState({
     theme: user.theme || 'light',
     privacy: user.privacy || 'Community visible',
