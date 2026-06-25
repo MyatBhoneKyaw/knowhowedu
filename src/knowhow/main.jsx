@@ -2131,7 +2131,7 @@ function AuthScreen({ onAuthSuccess }) {
       <form className="auth-card glass register-card clean-auth-card" onSubmit={submitAuth}>
         <div className="logo large logo-image-mark"><BrandLogo className="brand-logo-auth" /></div>
         <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
-        <p>{mode === 'login' ? 'Log in to continue learning and teaching.' : 'Set up your Know-how profile in a clean, simple form.'}</p>
+        {mode !== 'login' && <p>Set up your Know-how profile in a clean, simple form.</p>}
         <ProfileOptionLists />
         <div className="tabs compact auth-tabs">
           <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>Login</button>
