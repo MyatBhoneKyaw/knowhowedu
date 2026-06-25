@@ -3889,7 +3889,7 @@ function LiveAttendanceSummary({ activeMeeting }) {
   const totalSec = Math.max(0, Math.floor(verifiedMin * 60));
   const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
   const ss = String(totalSec % 60).padStart(2, '0');
-  const liveCredits = minutesToCredits(verifiedMin || liveFields.actualDurationMinutes || 0);
+  const liveCredits = minutesToCredits(verifiedMin);
   return (
     <div className="summary-box live-attendance-box">
       <div className="live-counter" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, background: accruing ? '#ecfdf5' : '#f3f4f6', border: `1px solid ${accruing ? '#10b981' : '#d1d5db'}`, marginBottom: 8 }}>
