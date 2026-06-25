@@ -3648,7 +3648,10 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
           <div className="messages-panel-head messenger-title-row simple-messenger-title-row">
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'nowrap' }}><strong>Messenger</strong><span>{filteredContacts.length} conversation(s)</span></div>
           </div>
-          <input className="compact-input messenger-search-input" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Search people or groups" />
+          <div className="messenger-search-wrap">
+            <svg className="messenger-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input className="compact-input messenger-search-input" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Search people or groups" />
+          </div>
           <div className="chat-filter-row"><button type="button" className={activeFilter === 'inbox' ? 'active' : ''} onClick={() => setActiveFilter('inbox')}>Inbox</button><button type="button" className={activeFilter === 'people' ? 'active' : ''} onClick={() => setActiveFilter('people')}>People</button></div>
           <div className="contact-scroll modern-contact-scroll">
             {filteredContacts.length === 0 && <p className="muted-text empty-contacts">No conversations found.</p>}
