@@ -4112,7 +4112,7 @@ function CommunityPage({ user, posts = [], setPosts = () => {} }) {
       <header className="community-directory-header community-feed-header">
         <div>
           <h2>Community</h2>
-          <p>Search discussions, open a board, or tap + to publish a new post.</p>
+          
         </div>
         
       </header>
