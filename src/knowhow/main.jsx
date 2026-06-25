@@ -5308,7 +5308,7 @@ function VideoPanelPage({ user, setUser }) {
     async function loadUploadedVideos() {
       if (!user.id) return;
       setVideoLoading(true);
-    try {
+      try {
         const { data, error } = await supabase
           .from('lecture_videos')
           .select('*')
@@ -5504,6 +5504,7 @@ function VideoPanelPage({ user, setUser }) {
         <label className="community-search-box"><span>⌕</span><input value={videoSearch} onChange={(event) => setVideoSearch(event.target.value)} placeholder="Search lecture videos..." /></label>
         <div className="community-category-tabs video-tabs">{categories.map((category) => <button key={category} className={selectedCategory === category ? 'active' : ''} type="button" onClick={() => setSelectedCategory(category)}>{category}</button>)}</div>
       </div>
+      {videoLoading && <div className="notice compact-notice">Loading saved videos...</div>}
       {videoNotice && <div className="notice compact-notice">{videoNotice}</div>}
       {view === 'owned' && filteredVideos.length === 0 && (
         <div className="card" style={{ padding: 20, textAlign: 'center' }}><p className="muted-text">You haven't claimed any videos yet. Browse and claim free lectures or purchase premium ones to see them here.</p></div>
@@ -5548,8 +5549,8 @@ function VideoPanelPage({ user, setUser }) {
               )}
               
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-                <button type="button" className="ghost" onClick={() => setShowUpload(false)}>Cancel</button>
-                <button type="submit" className="primary">Publish</button>
+                <button type="button" className="ghost" onClick={() => setShowUpload(false)} disabled={uploadSaving}>Cancel</button>
+                <button type="submit" className="primary" disabled={uploadSaving}>{uploadSaving ? 'Publishing...' : 'Publish'}</button>
               </div>
             </form>
           </div>
@@ -5574,7 +5575,7 @@ function VideoPanelPage({ user, setUser }) {
                 <MiniPill title="Teacher" text={video.teacher} />
                 <div className="video-card-actions">
                   <strong>{isFree ? 'Free' : `${formatCredits(video.priceCredits)} credits`}</strong>
-                  <button className="primary" type="button" onClick={() => claimOrBuy(video)}>{label}</button>
+                  <button className="primary" type="button" onClick={() => claimOrBuy(video)} disabled={videoSaving === video.id}>{videoSaving === video.id ? 'Saving...' : label}</button>
                 </div>
               </div>
             </article>
@@ -5597,7 +5598,7 @@ function VideoPanelPage({ user, setUser }) {
                 style={{ width: '100%', maxHeight: '70vh', aspectRatio: '16/9', borderRadius: 12, background: '#000', display: 'block' }}
                 onError={(e) => { console.warn('video error', activeVideo.videoUrl, e?.currentTarget?.error); }}
               >
-                <source src={activeVideo.videoUrl} type="video/mp4" />
+                <source src={activeVideo.videoUrl} />
                 Your browser cannot play this video. <a href={activeVideo.videoUrl} target="_blank" rel="noreferrer">Open in new tab</a>
               </video>
             ) : (
