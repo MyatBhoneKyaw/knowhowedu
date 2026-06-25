@@ -1033,6 +1033,88 @@ export type Database = {
         }
         Returns: boolean
       }
+      session_attendance_join: {
+        Args: { _role: string; _session_id: string; _user_name: string }
+        Returns: {
+          actual_duration_minutes: number
+          attendance_verified: boolean
+          completed_at: string | null
+          created_at: string
+          credit_amount: number
+          credit_rate_per_minute: number
+          date: string
+          duration_hours: number
+          id: string
+          learner_id: string | null
+          learner_joined_at: string | null
+          learner_left_at: string | null
+          learning_summary: Json | null
+          meeting_link: string
+          meeting_provider: string
+          meeting_space_name: string
+          mentor_joined_at: string | null
+          mentor_left_at: string | null
+          notes: string
+          requested_by: string
+          room_id: string
+          seats_available: number
+          skill_category: string
+          skill_topic: string
+          status: string
+          student_limit: number
+          teacher_id: string
+          teacher_level: string
+          updated_at: string
+          verified_duration_minutes: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      session_attendance_leave: {
+        Args: { _session_id: string; _user_name: string }
+        Returns: {
+          actual_duration_minutes: number
+          attendance_verified: boolean
+          completed_at: string | null
+          created_at: string
+          credit_amount: number
+          credit_rate_per_minute: number
+          date: string
+          duration_hours: number
+          id: string
+          learner_id: string | null
+          learner_joined_at: string | null
+          learner_left_at: string | null
+          learning_summary: Json | null
+          meeting_link: string
+          meeting_provider: string
+          meeting_space_name: string
+          mentor_joined_at: string | null
+          mentor_left_at: string | null
+          notes: string
+          requested_by: string
+          room_id: string
+          seats_available: number
+          skill_category: string
+          skill_topic: string
+          status: string
+          student_limit: number
+          teacher_id: string
+          teacher_level: string
+          updated_at: string
+          verified_duration_minutes: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       session_complete: {
         Args: { _session_id: string }
         Returns: {
