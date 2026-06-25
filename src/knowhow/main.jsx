@@ -4380,14 +4380,8 @@ function SettingsPage({ user, setUser, onLogout }) {
       );
     }
 
-    if (activeSection === 'integrations') {
-      return (
-        <div className="settings-panel-card">
-          <h2>Integrations</h2>
-          {['Google Meet sessions', 'Calendar reminders', 'Portfolio links', 'Certificate storage'].map((item) => <div className="settings-row" key={item}><span><strong>{item}</strong><small>Connected in demo mode when available.</small></span><button className="ghost" type="button" onClick={() => setSettingsNotice(`${item} integration opened.`)}>Manage</button></div>)}
-        </div>
-      );
-    }
+
+
 
     if (activeSection === 'support') {
       return (
