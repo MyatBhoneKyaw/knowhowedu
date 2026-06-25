@@ -2718,12 +2718,11 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
           <div className="list">
             {CREDIT_PRODUCTS.map((product) => (
               <div className="skill-row" key={product.id}>
-                <div><strong>{product.title}</strong><span>{product.price} • {product.credits ? `${product.credits} credits` : 'lecture video access'}</span></div>
+                <div><strong>{product.title}</strong><span>{product.price} • {product.credits} credit{product.credits === 1 ? '' : 's'}</span></div>
                 <button className="primary" type="button" onClick={() => openPayment(product)}>Buy</button>
               </div>
             ))}
           </div>
-          <div className="summary-box"><strong>Lecture video access:</strong> {wallet.lectureAccess || 0}</div>
         </div>
       </div>
       <div className="card credit-history-card">
