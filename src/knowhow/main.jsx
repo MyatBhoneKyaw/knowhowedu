@@ -1829,7 +1829,7 @@ function App() {
     dashboard: <Dashboard user={user} level={level} sessions={sessions} setPage={setPage} />,
     search: <SearchPage user={user} people={allPeople} posts={communityPosts} sessions={sessions} messages={messages} setMessages={updateMessages} setPage={setPage} initialQuery={navSearchQuery} />,
     wallet: <WalletPage user={user} setUser={updateUser} transactions={transactions} setTransactions={updateTransactions} />,
-    sessions: <SessionsPage user={user} setUser={updateUser} sessions={sessions} setSessions={updateSessions} transactions={transactions} setTransactions={updateTransactions} />,
+    sessions: <SessionsPage user={user} setUser={updateUser} sessions={sessions} setSessions={updateSessions} transactions={transactions} setTransactions={updateTransactions} setPage={setPage} />,
     community: <CommunityPage user={user} posts={communityPosts} setPosts={(next) => { setCommunityPosts(next); localStorage.setItem('knowhow-community-posts', JSON.stringify(next)); }} />,
     video: <VideoPanelPage user={user} setUser={updateUser} />,
     friends: <FriendPage user={user} people={allPeople} setPage={setPage} setNavSearchQuery={setNavSearchQuery} />,
