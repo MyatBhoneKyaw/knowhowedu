@@ -224,7 +224,10 @@ function startObserver() {
         }
       }
     }
-    if (pending.length) schedule();
+    if (pending.length) {
+      applyCachedSync();
+      if (pending.length) schedule();
+    }
   });
   observer.observe(document.body, {
     childList: true,
