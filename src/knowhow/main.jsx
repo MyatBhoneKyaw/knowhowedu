@@ -3124,21 +3124,22 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
           </div>
         </div>
       </div>
-      <div className="card credit-history-card">
-        <div className="section-title">
-          <h3>Credit History</h3>
-          <label className="history-filter-label">
+      <details className="card credit-history-card" open>
+        <summary className="section-title" style={{ cursor: 'pointer', listStyle: 'none' }}>
+          <h3 style={{ display: 'inline' }}>Credit History</h3>
+          <label className="history-filter-label" onClick={(e) => e.stopPropagation()}>
             <span>Type</span>
             <select value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value)}>
               {historyTypes.map((type) => <option key={type}>{type}</option>)}
             </select>
           </label>
-        </div>
+        </summary>
         <div className="list">
           {filteredTransactions.length === 0 && <p className="muted-text">No credit history for this type.</p>}
           {filteredTransactions.map((item) => <TransactionItem key={item.id} item={item} />)}
         </div>
-      </div>
+      </details>
+
       {paymentProduct && (
         <div className="modal-backdrop high-modal-backdrop">
           <form className="modal card payment-modal" onSubmit={completePayment}>
