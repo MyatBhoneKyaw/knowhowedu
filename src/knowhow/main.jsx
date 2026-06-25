@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import knowhowLogo from './knowhow-logo.png';
 import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable';
 
 
 // Lovable Cloud (Supabase) backend — replaces the legacy MongoDB API.
