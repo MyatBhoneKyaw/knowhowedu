@@ -2197,22 +2197,16 @@ function AuthScreen({ onAuthSuccess }) {
                 hasTokens: !!result?.tokens,
                 hasError: !!result?.error,
                 errorMessage: result?.error?.message,
-                errorName: result?.error?.name,
               });
-              if (result?.tokens) {
-                try {
-                  const { data: userData, error: userErr } = await supabase.auth.getUser();
-                  logOAuth('profile:getUser', {
-                    userId: userData?.user?.id,
-                    email: userData?.user?.email,
-                    provider: userData?.user?.app_metadata?.provider,
-                    errorMessage: userErr?.message,
-                  });
-                } catch (err) {
-                  logOAuth('profile:getUser:throw', { message: err?.message, name: err?.name });
-                }
-              }
-              if (result?.error) setError(result.error.message || 'Google sign-in failed');
+              if (result?.error) { setError(result.error.message || 'Google sign-in failed'); return; }
+              if (result?.redirected) return; // full-page redirect in progress
+              // Tokens received & session set — finish sign-in inside the app
+              const { data: sessionData } = await supabase.auth.getSession();
+              const accessToken = sessionData?.session?.access_token;
+              if (!accessToken) { setError('Google sign-in did not return a session.'); return; }
+              localStorage.setItem('knowhow-token', accessToken);
+              const me = await apiRequest('/auth/me');
+              onAuthSuccess({ token: accessToken, user: me.user, wallet: me.wallet, authAction: 'login' });
             } catch (err) {
               logOAuth('signInWithOAuth:throw', { message: err?.message, name: err?.name, stack: err?.stack });
               setError(err?.message || 'Google sign-in failed');
