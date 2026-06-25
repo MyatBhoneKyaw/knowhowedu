@@ -5286,6 +5286,8 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
   const [adminNotice, setAdminNotice] = useState('');
   const [reports, setReports] = useState([]);
   const [reportsNotice, setReportsNotice] = useState('');
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
+  const profileModalUser = profileModalUserId ? adminUsers.find((item) => item.id === profileModalUserId) : null;
 
   async function loadReports() {
     try {
@@ -5396,7 +5398,7 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
             {adminUsers.map((person) => (
               <div className={`skill-row selectable ${selectedUserId === person.id ? 'selected' : ''}`} key={`${person.id}-${person.username}`} onClick={() => setSelectedUserId(person.id)}>
                 <div><strong>{person.fullName}</strong><span>@{person.username} • {person.role} • {person.status} • License: {person.license}</span></div>
-                <div className="actions inline"><button className="ghost" type="button">View</button><button className="danger" type="button">Suspend</button></div>
+                <div className="actions inline"><button className="ghost" type="button" onClick={(event) => { event.stopPropagation(); setProfileModalUserId(person.id); }}>View</button><button className="danger" type="button" onClick={(event) => event.stopPropagation()}>Suspend</button></div>
               </div>
             ))}
           </div>
@@ -5492,6 +5494,45 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
         <h3>Session Monitoring</h3>
         <div className="list">{sessions.map((session) => <SessionMini key={session.id} session={session} />)}</div>
       </div>
+      {profileModalUser && (
+        <div className="modal-backdrop high-modal-backdrop" onClick={() => setProfileModalUserId(null)}>
+          <div className="modal card search-profile-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="section-title">
+              <h3>User Profile</h3>
+              <StatusBadge status={profileModalUser.status} />
+            </div>
+            <div className="profile-head">
+              <Avatar text={getInitials(profileModalUser.fullName)} large />
+              <div>
+                <h2>{profileModalUser.fullName}</h2>
+                <p>@{profileModalUser.username} • {profileModalUser.email || 'No email'} • {profileModalUser.role}</p>
+              </div>
+            </div>
+            <div className="pill-wrap left">
+              {(profileModalUser.languages || []).map((item) => <span className="pill muted" key={item}>{item}</span>)}
+              {(profileModalUser.interests || []).map((item) => <span className="pill" key={item}>{item}</span>)}
+            </div>
+            <div className="stats-grid mini-stats">
+              <StatCard label="Credits" value={profileModalUser.wallet.current} hint="Available" />
+              <StatCard label="Loan" value={profileModalUser.loan.outstanding} hint={`Limit ${profileModalUser.loan.limit} • ${profileModalUser.loan.due}`} />
+              <StatCard label="Purchased" value={profileModalUser.wallet.purchased} hint="Credit points" />
+              <StatCard label="Videos" value={profileModalUser.wallet.lectureAccess} hint="Lecture access" />
+            </div>
+            <h3>License</h3>
+            <p className="muted-text">{profileModalUser.license}</p>
+            <h3>Recent Transactions</h3>
+            <div className="list">
+              {profileModalUser.transactions.length
+                ? profileModalUser.transactions.map((item) => <TransactionItem key={`modal-${profileModalUser.id}-${item.id}`} item={item} />)
+                : <p className="muted-text">No credit transactions yet.</p>}
+            </div>
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={() => setProfileModalUserId(null)}>Close</button>
+              <button className="primary" type="button" onClick={() => { setSelectedUserId(profileModalUser.id); setProfileModalUserId(null); }}>Open in Panel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
