@@ -3133,8 +3133,10 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
               </div>
             ))}
           </div>
+        </div>
       </div>
       <div className="card">
+
         <div className="section-title">
           <h3>Subscription Shop</h3>
           <span className="pill muted">Current: {activePlan}{subState.expiresAt && activePlan !== 'Free' ? ` (until ${new Date(subState.expiresAt).toLocaleDateString()})` : ''}</span>
