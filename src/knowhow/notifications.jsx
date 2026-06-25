@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { supabase } from '../integrations/supabase/client';
 
 const STORAGE_PREFIX = 'knowhow.notifications.';
 const EVENT_NAME = 'knowhow:notify';
@@ -25,20 +26,59 @@ function saveAll(userId, items) {
   } catch {}
 }
 
-export function notify(userId, payload) {
+function mapRowToItem(row) {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    read: !!row.is_read,
+    category: row.type || 'system',
+    title: row.title || 'Notification',
+    body: row.body || '',
+    icon: iconFor(row.type),
+    remote: true,
+  };
+}
+
+function mergeItems(local, remote) {
+  const seen = new Set();
+  const out = [];
+  for (const it of [...remote, ...local]) {
+    if (!it?.id || seen.has(it.id)) continue;
+    seen.add(it.id);
+    out.push(it);
+  }
+  return out.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, MAX_ITEMS);
+}
+
+export async function notify(userId, payload) {
   if (!userId) return;
+  const category = payload.category || 'system';
   const item = {
     id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `n_${Date.now()}_${Math.random()}`,
     createdAt: new Date().toISOString(),
     read: false,
-    category: payload.category || 'system',
+    category,
     title: payload.title || 'Notification',
     body: payload.body || '',
-    icon: payload.icon || iconFor(payload.category),
+    icon: payload.icon || iconFor(category),
   };
-  const list = [item, ...loadAll(userId)].slice(0, MAX_ITEMS);
-  saveAll(userId, list);
+  // Persist to Supabase so the recipient sees it on their device.
   try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({ user_id: userId, title: item.title, body: item.body, type: category, is_read: false })
+      .select()
+      .single();
+    if (!error && data) {
+      item.id = data.id;
+      item.createdAt = data.created_at;
+      item.remote = true;
+    }
+  } catch {}
+  // Also cache locally so the current tab sees it immediately (only for self).
+  try {
+    const list = [item, ...loadAll(userId)].slice(0, MAX_ITEMS);
+    saveAll(userId, list);
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { userId } }));
   } catch {}
   return item;
@@ -71,7 +111,6 @@ function maybeFirePromo(userId) {
   const lastKey = `${STORAGE_PREFIX}lastpromo.${userId}`;
   const lastAt = Number(localStorage.getItem(lastKey) || 0);
   const now = Date.now();
-  // Roughly every 30 minutes per user, plus a first-load delay.
   if (now - lastAt < 30 * 60 * 1000) return;
   const item = PROMO_POOL[Math.floor(Math.random() * PROMO_POOL.length)];
   notify(userId, item);
@@ -80,6 +119,46 @@ function maybeFirePromo(userId) {
 
 export function useNotifications(userId) {
   const [items, setItems] = useState(() => loadAll(userId));
+
+  // Hydrate from Supabase and subscribe to realtime inserts.
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    async function load() {
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(MAX_ITEMS);
+        if (!active || error || !Array.isArray(data)) return;
+        const remote = data.map(mapRowToItem);
+        const merged = mergeItems(loadAll(userId), remote);
+        saveAll(userId, merged);
+        setItems(merged);
+      } catch {}
+    }
+    load();
+    const poll = setInterval(load, 20 * 1000);
+    let channel;
+    try {
+      channel = supabase
+        .channel(`notif-${userId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
+          const item = mapRowToItem(payload.new);
+          const merged = mergeItems([item], loadAll(userId));
+          saveAll(userId, merged);
+          setItems(merged);
+        })
+        .subscribe();
+    } catch {}
+    return () => {
+      active = false;
+      clearInterval(poll);
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
+  }, [userId]);
 
   useEffect(() => {
     setItems(loadAll(userId));
@@ -94,21 +173,24 @@ export function useNotifications(userId) {
     };
   }, [userId]);
 
-  function markAllRead() {
+  async function markAllRead() {
     const next = loadAll(userId).map((n) => ({ ...n, read: true }));
     saveAll(userId, next);
     setItems(next);
+    try { await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('is_read', false); } catch {}
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { userId } }));
   }
-  function clearAll() {
+  async function clearAll() {
     saveAll(userId, []);
     setItems([]);
+    try { await supabase.from('notifications').delete().eq('user_id', userId); } catch {}
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { userId } }));
   }
-  function remove(id) {
+  async function remove(id) {
     const next = loadAll(userId).filter((n) => n.id !== id);
     saveAll(userId, next);
     setItems(next);
+    try { await supabase.from('notifications').delete().eq('id', id); } catch {}
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { userId } }));
   }
 
@@ -132,7 +214,6 @@ export function NotificationBell({ userId, sessions = [] }) {
   const { items, unread, markAllRead, clearAll, remove } = useNotifications(userId);
   const ref = useRef(null);
 
-  // Periodic promo + transactional spinner.
   useEffect(() => {
     if (!userId) return;
     const t1 = setTimeout(() => maybeFirePromo(userId), 20 * 1000);
@@ -140,7 +221,6 @@ export function NotificationBell({ userId, sessions = [] }) {
     return () => { clearTimeout(t1); clearInterval(t2); };
   }, [userId]);
 
-  // Session reminders: fire 15-minute heads-up once per session.
   useEffect(() => {
     if (!userId || !Array.isArray(sessions)) return;
     const firedKey = `${STORAGE_PREFIX}reminders.${userId}`;
