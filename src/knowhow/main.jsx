@@ -1300,14 +1300,14 @@ const CREDIT_PRODUCTS = [
   { id: 'cp03', title: '5 Credit Points', credits: 5, price: '$22', productType: 'credit_points' },
 ];
 
-const SAMPLE_VIDEO_BASE = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample';
+const SAMPLE_VIDEO_BASE = 'https://test-videos.co.uk/vids';
 const SAMPLE_POSTER_BASE = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images';
 const LECTURE_VIDEOS = [
-  { id: 'free-ui-basics', title: 'UI/UX Basics for Beginners', teacher: 'Ei Mon', category: 'Design', duration: '18 min', level: 'Beginner', priceCredits: 0, description: 'A quick free starter lesson about layout, spacing, and visual hierarchy.', badge: 'Free', videoUrl: `${SAMPLE_VIDEO_BASE}/ForBiggerBlazes.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerBlazes.jpg` },
-  { id: 'free-english-speaking', title: 'Daily English Speaking Warmups', teacher: 'Aung Min Thu', category: 'Language', duration: '12 min', level: 'Beginner', priceCredits: 0, description: 'Practice confidence, pronunciation, and simple conversation patterns.', badge: 'Free', videoUrl: `${SAMPLE_VIDEO_BASE}/ForBiggerEscapes.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerEscapes.jpg` },
-  { id: 'paid-react-project', title: 'Build a React Mini Project', teacher: 'May Thandar', category: 'Programming', duration: '54 min', level: 'Intermediate', priceCredits: 1.5, description: 'A practical teacher-posted lecture for building components, state, and clean UI.', badge: 'Premium', videoUrl: `${SAMPLE_VIDEO_BASE}/ForBiggerFun.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerFun.jpg` },
-  { id: 'paid-video-editing', title: 'Video Editing Workflow Masterclass', teacher: 'Su Myat Noe', category: 'Creative', duration: '47 min', level: 'Intermediate', priceCredits: 1.25, description: 'Learn timeline setup, cuts, color correction, captions, and export settings.', badge: 'Premium', videoUrl: `${SAMPLE_VIDEO_BASE}/ForBiggerJoyrides.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerJoyrides.jpg` },
-  { id: 'paid-japanese-n5', title: 'Japanese N5 Grammar Pack', teacher: 'Hnin Wai', category: 'Language', duration: '63 min', level: 'N5', priceCredits: 1.75, description: 'Structured grammar explanations with examples and short review tasks.', badge: 'Premium', videoUrl: `${SAMPLE_VIDEO_BASE}/ForBiggerMeltdowns.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerMeltdowns.jpg` },
+  { id: 'free-ui-basics', title: 'UI/UX Basics for Beginners', teacher: 'Ei Mon', category: 'Design', duration: '18 min', level: 'Beginner', priceCredits: 0, description: 'A quick free starter lesson about layout, spacing, and visual hierarchy.', badge: 'Free', videoUrl: `${SAMPLE_VIDEO_BASE}/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerBlazes.jpg` },
+  { id: 'free-english-speaking', title: 'Daily English Speaking Warmups', teacher: 'Aung Min Thu', category: 'Language', duration: '12 min', level: 'Beginner', priceCredits: 0, description: 'Practice confidence, pronunciation, and simple conversation patterns.', badge: 'Free', videoUrl: `${SAMPLE_VIDEO_BASE}/sintel/mp4/h264/720/Sintel_720_10s_5MB.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerEscapes.jpg` },
+  { id: 'paid-react-project', title: 'Build a React Mini Project', teacher: 'May Thandar', category: 'Programming', duration: '54 min', level: 'Intermediate', priceCredits: 1.5, description: 'A practical teacher-posted lecture for building components, state, and clean UI.', badge: 'Premium', videoUrl: `${SAMPLE_VIDEO_BASE}/jellyfish/mp4/h264/720/Jellyfish_720_10s_5MB.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerFun.jpg` },
+  { id: 'paid-video-editing', title: 'Video Editing Workflow Masterclass', teacher: 'Su Myat Noe', category: 'Creative', duration: '47 min', level: 'Intermediate', priceCredits: 1.25, description: 'Learn timeline setup, cuts, color correction, captions, and export settings.', badge: 'Premium', videoUrl: `${SAMPLE_VIDEO_BASE}/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerJoyrides.jpg` },
+  { id: 'paid-japanese-n5', title: 'Japanese N5 Grammar Pack', teacher: 'Hnin Wai', category: 'Language', duration: '63 min', level: 'N5', priceCredits: 1.75, description: 'Structured grammar explanations with examples and short review tasks.', badge: 'Premium', videoUrl: `${SAMPLE_VIDEO_BASE}/sintel/mp4/h264/360/Sintel_360_10s_1MB.mp4`, poster: `${SAMPLE_POSTER_BASE}/ForBiggerMeltdowns.jpg` },
 ];
 
 const LOAN_POLICY = {
@@ -5364,7 +5364,20 @@ function VideoPanelPage({ user, setUser }) {
           <div className="modal card video-watch-modal">
             <div className="section-title"><h3>{activeVideo.title}</h3><button className="ghost" type="button" onClick={() => setActiveVideo(null)}>Close</button></div>
             {activeVideo.videoUrl ? (
-              <video className="video-player-frame" src={activeVideo.videoUrl} poster={activeVideo.poster} controls autoPlay style={{ width: '100%', borderRadius: 12, background: '#000' }} />
+              <video
+                key={activeVideo.id}
+                className="video-player-frame"
+                poster={activeVideo.poster}
+                controls
+                autoPlay
+                playsInline
+                preload="metadata"
+                style={{ width: '100%', maxHeight: '70vh', aspectRatio: '16/9', borderRadius: 12, background: '#000', display: 'block' }}
+                onError={(e) => { console.warn('video error', activeVideo.videoUrl, e?.currentTarget?.error); }}
+              >
+                <source src={activeVideo.videoUrl} type="video/mp4" />
+                Your browser cannot play this video. <a href={activeVideo.videoUrl} target="_blank" rel="noreferrer">Open in new tab</a>
+              </video>
             ) : (
               <div className="video-player-placeholder"><span>▶</span><strong>Lecture video preview</strong><small>{activeVideo.duration} • Teacher: {activeVideo.teacher}</small></div>
             )}
