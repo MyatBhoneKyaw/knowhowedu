@@ -4799,7 +4799,7 @@ function VideoPanelPage({ user, setUser }) {
           else label = 'Buy';
           return (
             <article className="card video-card" key={video.id}>
-              <div className="video-thumb"><span>▶</span><b>{owned ? 'Owned' : video.badge}</b></div>
+              <div className="video-thumb" style={video.poster ? { backgroundImage: `url(${video.poster})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}><span>▶</span><b>{owned ? 'Owned' : video.badge}</b></div>
               <div className="video-card-body">
                 <div className="post-meta"><span>{video.category}</span><span>{video.duration}</span><span>{video.level}</span></div>
                 <h3>{video.title}</h3>
