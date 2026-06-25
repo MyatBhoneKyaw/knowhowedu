@@ -3228,6 +3228,28 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
         </div>
       )}
 
+      {rescheduleTarget && (
+        <div className="modal-backdrop">
+          <form className="modal card" onSubmit={submitReschedule}>
+            <div className="section-title">
+              <h2>Reschedule Session</h2>
+              <button className="icon" type="button" onClick={closeReschedule}>×</button>
+            </div>
+            <p className="muted-text">{rescheduleTarget.topic} • currently {rescheduleTarget.date || 'TBA'} {rescheduleTarget.time || ''}</p>
+            <div className="form-grid">
+              <div><label>New Date</label><input type="date" value={rescheduleDraft.date} onChange={(e) => setRescheduleDraft({ ...rescheduleDraft, date: e.target.value })} required /></div>
+              <div><label>New Time</label><input type="time" value={rescheduleDraft.time} onChange={(e) => setRescheduleDraft({ ...rescheduleDraft, time: e.target.value })} required /></div>
+              <div><label>Duration (minutes)</label><input type="number" min="1" step="1" value={rescheduleDraft.durationMinutes} onChange={(e) => setRescheduleDraft({ ...rescheduleDraft, durationMinutes: e.target.value })} required /></div>
+            </div>
+            <div className="actions">
+              <button className="ghost" type="button" onClick={closeReschedule}>Cancel</button>
+              <button className="primary" type="submit">Save New Time</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+
       {activeMeeting && (
         <div className="modal-backdrop">
           <div className="modal card meeting-room">
