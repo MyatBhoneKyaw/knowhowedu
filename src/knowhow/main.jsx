@@ -3284,6 +3284,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     setSessionNotice('');
     if (!window.confirm('Cancel and delete this session? This cannot be undone.')) return;
     setSessions((current) => current.filter((s) => s.id !== session.id));
+    notify(user.id, { category: 'reschedule', title: 'Session cancelled', body: `${session.topic || 'Your session'} on ${session.date || 'TBA'} ${session.time || ''} was cancelled.` });
     apiRequest(`/sessions/${session.id}`, { method: 'DELETE' })
       .then(() => setSessionNotice('Session cancelled and removed.'))
       .catch((err) => setSessionNotice(`Removed locally but cloud delete failed: ${err.message}.`));
