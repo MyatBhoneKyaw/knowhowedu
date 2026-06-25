@@ -3892,13 +3892,19 @@ function LiveAttendanceSummary({ activeMeeting }) {
   const liveCredits = minutesToCredits(verifiedMin);
   return (
     <div className="summary-box live-attendance-box">
-      <div className="live-counter" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, background: accruing ? '#ecfdf5' : '#f3f4f6', border: `1px solid ${accruing ? '#10b981' : '#d1d5db'}`, marginBottom: 8 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: accruing ? '#10b981' : '#9ca3af', boxShadow: accruing ? '0 0 0 4px rgba(16,185,129,0.2)' : 'none', animation: accruing ? 'pulse 1.5s infinite' : 'none' }} />
+      <div className="live-counter" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, background: accruing ? '#ecfdf5' : '#fef3c7', border: `1px solid ${accruing ? '#10b981' : '#f59e0b'}`, marginBottom: 8 }}>
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: accruing ? '#10b981' : '#f59e0b', boxShadow: accruing ? '0 0 0 4px rgba(16,185,129,0.2)' : '0 0 0 4px rgba(245,158,11,0.2)', animation: 'pulse 1.5s infinite' }} />
         <strong style={{ fontSize: 13, color: '#374151' }}>Verified minutes</strong>
-        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 22, color: accruing ? '#065f46' : '#6b7280' }}>{mm}:{ss}</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 22, color: accruing ? '#065f46' : '#92400e' }}>{mm}:{ss}</span>
         <span style={{ marginLeft: 'auto', fontSize: 13, color: '#374151' }}>≈ <strong>{formatCredits(liveCredits)}</strong> credit(s)</span>
-        <span style={{ fontSize: 11, color: accruing ? '#059669' : '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{accruing ? 'Accruing' : 'Paused'}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: accruing ? '#059669' : '#d97706', padding: '3px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>{accruing ? 'Accruing' : 'Paused'}</span>
       </div>
+      {!accruing && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fcd34d', marginBottom: 8, fontSize: 12, color: '#92400e' }}>
+          <span style={{ fontSize: 14 }}>⏸️</span>
+          <span><strong>Credits paused.</strong> {!liveFields.mentorJoinedAt ? 'Waiting for the teacher to join.' : !liveFields.learnerJoinedAt ? 'Waiting for a learner to join.' : 'Waiting for verified overlap to begin.'} Credits only accrue while both teacher and learner are present.</span>
+        </div>
+      )}
       <span style={{ fontSize: 12, color: '#6b7280' }}>Mentor joined: {liveFields.mentorJoinedAt || '—'} • Learner joined: {liveFields.learnerJoinedAt || '—'} • Actual: {liveFields.actualDurationMinutes} min</span>
     </div>
   );
