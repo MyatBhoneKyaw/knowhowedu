@@ -2592,7 +2592,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const alreadyClaimed = dailyState.lastClaim === today;
   const nextStreak = dailyState.lastClaim === yesterday ? Math.min((dailyState.streak || 0) + 1, 7) : 1;
-  const rewardAmount = Number((0.25 + (nextStreak - 1) * 0.05).toFixed(2));
+  const rewardAmount = Number((1 + (nextStreak - 1) * (0.5 / 6)).toFixed(2));
 
   function claimDailyReward() {
     setWalletNotice('');
