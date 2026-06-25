@@ -32,7 +32,20 @@ function loadCache(lang: string) {
     }
   } catch (_) {}
 }
+let saveTimer: number | null = null;
 function saveCache(lang: string) {
+  if (saveTimer) window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    saveTimer = null;
+    try {
+      const obj: Record<string, string> = {};
+      cache.forEach((v, k) => { obj[k] = v; });
+      localStorage.setItem(CACHE_KEY(lang), JSON.stringify(obj));
+    } catch (_) {}
+  }, 400);
+}
+function flushCache(lang: string) {
+  if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
   try {
     const obj: Record<string, string> = {};
     cache.forEach((v, k) => { obj[k] = v; });
@@ -170,10 +183,25 @@ function schedule(delay = 120) {
   scheduleTimer = window.setTimeout(() => { scheduleTimer = null; run(); }, delay);
 }
 
+function applyCachedSync() {
+  const remaining: Target[] = [];
+  for (const tgt of pending) {
+    if (tgt.kind === "text" && !tgt.node.isConnected) continue;
+    if (tgt.kind === "attr" && !tgt.el.isConnected) continue;
+    const key = getKey(tgt);
+    if (!key) continue;
+    const hit = cache.get(key);
+    if (hit) applyTranslation(tgt, hit);
+    else remaining.push(tgt);
+  }
+  pending = remaining;
+}
+
 function queueAll() {
   pending = [];
   collectFrom(document.body);
-  run();
+  applyCachedSync();
+  if (pending.length) run();
 }
 
 function startObserver() {
@@ -196,7 +224,10 @@ function startObserver() {
         }
       }
     }
-    if (pending.length) schedule();
+    if (pending.length) {
+      applyCachedSync();
+      if (pending.length) schedule();
+    }
   });
   observer.observe(document.body, {
     childList: true,
@@ -224,8 +255,13 @@ export function setTranslationLanguage(lang: string) {
 
 export function initTranslator() {
   if (typeof window === "undefined") return;
+  window.addEventListener("beforeunload", () => {
+    if (currentLang !== "en") flushCache(currentLang);
+  });
   const saved = localStorage.getItem("knowhow-language") || "English";
   if (saved !== "English") {
+    const code = saved === "Myanmar" ? "my" : saved === "Chinese" ? "zh-CN" : "en";
+    if (code !== "en") loadCache(code);
     setTimeout(() => setTranslationLanguage(saved), 300);
   }
 }
