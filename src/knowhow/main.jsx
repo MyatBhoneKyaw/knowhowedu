@@ -2918,6 +2918,58 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       .catch((err) => setSessionNotice(`Status updated locally but cloud sync failed: ${err.message}.`));
   }
 
+  function cancelSession(session) {
+    setSessionNotice('');
+    if (!window.confirm('Cancel and delete this session? This cannot be undone.')) return;
+    setSessions((current) => current.filter((s) => s.id !== session.id));
+    apiRequest(`/sessions/${session.id}`, { method: 'DELETE' })
+      .then(() => setSessionNotice('Session cancelled and removed.'))
+      .catch((err) => setSessionNotice(`Removed locally but cloud delete failed: ${err.message}.`));
+  }
+
+  function openReschedule(session) {
+    setSessionNotice('');
+    setRescheduleTarget(session);
+    setRescheduleDraft({
+      date: session.date || '',
+      time: session.time || '',
+      durationMinutes: session.durationMinutes || Math.round((Number(session.duration || 0)) * 60) || 30,
+    });
+  }
+
+  function closeReschedule() {
+    setRescheduleTarget(null);
+  }
+
+  async function submitReschedule(event) {
+    event.preventDefault();
+    if (!rescheduleTarget) return;
+    const { date, time, durationMinutes } = rescheduleDraft;
+    if (!date || !time) {
+      setSessionNotice('Please choose a new date and time to reschedule.');
+      return;
+    }
+    const minutes = Math.max(1, Math.floor(Number(durationMinutes) || 30));
+    const id = rescheduleTarget.id;
+    setSessions((current) => current.map((s) => s.id === id ? {
+      ...s,
+      date,
+      time,
+      durationMinutes: minutes,
+      duration: Number((minutes / 60).toFixed(2)),
+      credits: minutesToCredits(minutes),
+      status: 'Rescheduled',
+    } : s));
+    setRescheduleTarget(null);
+    try {
+      await apiRequest(`/sessions/${id}/reschedule`, { method: 'PATCH', body: JSON.stringify({ date, time, durationMinutes: minutes }) });
+      setSessionNotice('Session rescheduled. Learners will see the updated time.');
+    } catch (err) {
+      setSessionNotice(`Rescheduled locally but cloud sync failed: ${err.message}.`);
+    }
+  }
+
+
   function updateSessionAttendance(sessionId, updater) {
     let updatedSession = null;
     const nextSessions = sessions.map((session) => {
