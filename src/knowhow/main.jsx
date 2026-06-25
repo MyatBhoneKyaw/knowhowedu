@@ -3038,6 +3038,37 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [activeMeeting, setActiveMeeting] = useState(null);
   const [sessionEndAd, setSessionEndAd] = useState(null);
 
+  // Keep the active meeting in sync with the global sessions list (cloud polling refreshes attendance).
+  useEffect(() => {
+    if (!activeMeeting) return;
+    const fresh = sessions.find((s) => s.id === activeMeeting.id);
+    if (fresh && fresh !== activeMeeting) {
+      setActiveMeeting((curr) => (curr ? { ...curr, ...fresh } : curr));
+    }
+  }, [sessions, activeMeeting?.id]);
+
+  // While a meeting is open, poll that one session every 3s so the other participant's
+  // join/leave is reflected quickly (the global 15s feed poll is too slow for live counters).
+  useEffect(() => {
+    if (!activeMeeting?.id) return undefined;
+    const isCloud = activeMeeting.fromCloud || activeMeeting.cloudId || /^[0-9a-f-]{36}$/i.test(String(activeMeeting.id));
+    if (!isCloud) return undefined;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { data, error } = await supabase.from('sessions').select('*').eq('id', activeMeeting.id).maybeSingle();
+        if (cancelled || error || !data) return;
+        const merged = cloudToLocalSession(data);
+        if (!merged) return;
+        setSessions((curr) => curr.map((s) => (s.id === merged.id ? { ...s, ...merged } : s)));
+        setActiveMeeting((curr) => (curr && curr.id === merged.id ? { ...curr, ...merged } : curr));
+      } catch (_) { /* ignore */ }
+    };
+    const interval = window.setInterval(tick, 3000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [activeMeeting?.id]);
+
+
   const meetingRoomRef = useRef(null);
   function toggleMeetingFullscreen() {
     const el = meetingRoomRef.current;
@@ -3315,6 +3346,22 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       };
     });
     setActiveMeeting(updated);
+    // Sync attendance to the cloud so the other participant's client sees this join in real time.
+    const isCloudSession = session.id && (session.fromCloud || session.cloudId || /^[0-9a-f-]{36}$/i.test(String(session.id)));
+    if (isCloudSession) {
+      (async () => {
+        try {
+          const { data, error } = await supabase.rpc('session_attendance_join', { _session_id: session.id, _user_name: user.fullName, _role: role });
+          if (error) throw error;
+          const merged = cloudToLocalSession(data);
+          if (!merged) return;
+          setSessions((curr) => curr.map((s) => (s.id === merged.id ? { ...s, ...merged } : s)));
+          setActiveMeeting((curr) => (curr && curr.id === merged.id ? { ...curr, ...merged } : curr));
+        } catch (err) {
+          setSessionNotice(`Joined locally but cloud attendance sync failed: ${err.message || err}`);
+        }
+      })();
+    }
   }
 
   async function leaveMeeting() {
@@ -3336,8 +3383,22 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
 
     // 2) Settle verified-minute deltas per learner. Verified minutes = overlap where at
     //    least 1 mentor AND that learner were both present; auto-pauses otherwise.
-    const session = afterLeave || activeMeeting;
+    let session = afterLeave || activeMeeting;
     const isCloud = session.id && session.teacherId && (session.fromCloud || session.cloudId || /^[0-9a-f-]{36}$/i.test(String(session.id)));
+    // Sync this leave to the cloud BEFORE settlement so attendance reflects every participant.
+    if (isCloud) {
+      try {
+        const { data, error } = await supabase.rpc('session_attendance_leave', { _session_id: session.id, _user_name: user.fullName });
+        if (error) throw error;
+        const merged = cloudToLocalSession(data);
+        if (merged) {
+          session = { ...session, ...merged };
+          setSessions((curr) => curr.map((s) => (s.id === merged.id ? { ...s, ...merged } : s)));
+        }
+      } catch (err) {
+        setSessionNotice(`Leave sync failed: ${err.message || err}. Settling with local attendance.`);
+      }
+    }
     const ratePerMinute = getSessionCreditRate(session);
     const settledMap = { ...(session.settledMinutesByLearner || {}) };
     const joinedSeats = (session.joinedSeats || []).filter((s) => s.userId && s.userId !== session.teacherId);
