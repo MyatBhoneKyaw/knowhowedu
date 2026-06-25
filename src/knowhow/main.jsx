@@ -1782,6 +1782,27 @@ function App() {
   const [transactions, setTransactions] = useState(() => loadState('knowhow-transactions', INITIAL_TRANSACTIONS));
   const [messages, setMessages] = useState(() => loadState('knowhow-messages', INITIAL_MESSAGES));
   const [communityPosts, setCommunityPosts] = useState(() => loadState('knowhow-community-posts', INITIAL_COMMUNITY_POSTS));
+
+  useEffect(() => {
+    let cancelled = false;
+    async function syncPosts() {
+      try {
+        const cloud = await apiRequest('/community');
+        if (cancelled || !Array.isArray(cloud)) return;
+        setCommunityPosts((prev) => {
+          const cloudIds = new Set(cloud.map((p) => p.id));
+          const localOnly = (prev || []).filter((p) => !cloudIds.has(p.id) && (INITIAL_COMMUNITY_POSTS || []).some((i) => i.id === p.id));
+          const merged = [...cloud, ...localOnly];
+          localStorage.setItem('knowhow-community-posts', JSON.stringify(merged));
+          return merged;
+        });
+      } catch (err) { /* ignore */ }
+    }
+    syncPosts();
+    const id = setInterval(syncPosts, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
   const [teacherApplications, setTeacherApplications] = useState(() => loadTeacherApplications());
   const [adminAuthed, setAdminAuthed] = useState(() => Boolean(localStorage.getItem('knowhow-admin-token')));
   const [adminMode, setAdminMode] = useState(() => isAdminRoute() || Boolean(localStorage.getItem('knowhow-admin-token')));
