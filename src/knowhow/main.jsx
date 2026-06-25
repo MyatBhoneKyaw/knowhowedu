@@ -5710,16 +5710,21 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
 
       <div className="two-col">
         <div className="card">
-          <h3>Teacher / License Review</h3>
-          <div className="list">
-            {normalizedApplications.length === 0 && <p className="muted-text">No teaching applications yet.</p>}
-            {normalizedApplications.map((item) => (
-              <div className={`skill-row selectable ${selectedApplicationId === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedApplicationId(item.id)}>
-                <div><strong>{item.userName}</strong><span>{item.subject} • {item.requestedRole} • {item.status} • Submitted {String(item.submittedAt || '').slice(0, 10)}</span></div>
-                <button className="primary" type="button">View</button>
-              </div>
-            ))}
-          </div>
+          <details className="user-mgmt-dropdown">
+            <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', listStyle: 'none' }}>
+              <h3 style={{ margin: 0 }}>Teacher / License Review</h3>
+              <span className="muted-text" style={{ fontSize: 13 }}>{normalizedApplications.length} application(s) ▾</span>
+            </summary>
+            <div className="list" style={{ marginTop: 12 }}>
+              {normalizedApplications.length === 0 && <p className="muted-text">No teaching applications yet.</p>}
+              {normalizedApplications.map((item) => (
+                <div className={`skill-row selectable ${selectedApplicationId === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedApplicationId(item.id)}>
+                  <div><strong>{item.userName}</strong><span>{item.subject} • {item.requestedRole} • {item.status} • Submitted {String(item.submittedAt || '').slice(0, 10)}</span></div>
+                  <button className="primary" type="button">View</button>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
         <div className="card">
           {selectedApplication ? (
