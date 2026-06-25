@@ -1662,7 +1662,7 @@ function App() {
     [...PEOPLE, ...cloudPeople].forEach((p) => {
       const key = (p.username || p.id || '').toLowerCase();
       if (!key) return;
-      if (!map.has(key)) map.set(key, p);
+      if (p.isCloudUser || !map.has(key)) map.set(key, p);
     });
     // exclude current logged-in user from search list
     if (user?.username) map.delete(user.username.toLowerCase());
