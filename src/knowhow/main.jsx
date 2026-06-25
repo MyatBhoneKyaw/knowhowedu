@@ -4141,7 +4141,7 @@ function VideoPanelPage({ user, setUser }) {
           <h2>Video</h2>
           <p>Buy teacher-posted lectures with credits, or watch free learning videos.</p>
         </div>
-        <span className="pill muted">{formatCredits(user.wallet?.current || 0)} credits</span>
+        
       </header>
       <div className="video-toolbar card">
         <label className="community-search-box"><span>⌕</span><input value={videoSearch} onChange={(event) => setVideoSearch(event.target.value)} placeholder="Search lecture videos..." /></label>
