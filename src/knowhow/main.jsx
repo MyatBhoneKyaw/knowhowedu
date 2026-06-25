@@ -5372,7 +5372,6 @@ function VideoPanelPage({ user, setUser }) {
                 autoPlay
                 playsInline
                 preload="metadata"
-                crossOrigin="anonymous"
                 style={{ width: '100%', maxHeight: '70vh', aspectRatio: '16/9', borderRadius: 12, background: '#000', display: 'block' }}
                 onError={(e) => { console.warn('video error', activeVideo.videoUrl, e?.currentTarget?.error); }}
               >
