@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import knowhowLogo from './knowhow-logo.png';
@@ -2959,6 +2959,13 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [showDialog, setShowDialog] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
+  const meetingRoomRef = useRef(null);
+  function toggleMeetingFullscreen() {
+    const el = meetingRoomRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.();
+  }
   const [rescheduleTarget, setRescheduleTarget] = useState(null);
   const [rescheduleDraft, setRescheduleDraft] = useState({ date: '', time: '', durationMinutes: 30 });
   const [sessionSearch, setSessionSearch] = useState('');
@@ -3229,26 +3236,101 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       };
     });
     setActiveMeeting(updated);
-    if (isExternalMeetingLink(updated?.meetingLink)) {
-      window.open(updated.meetingLink, '_blank', 'noopener,noreferrer');
-    }
   }
 
-  function leaveMeeting() {
+  async function leaveMeeting() {
     if (!activeMeeting) return;
-    const updated = updateSessionAttendance(activeMeeting.id, (current) => {
-      const now = new Date().toISOString();
+    const nowIso = new Date().toISOString();
+    const sessionId = activeMeeting.id;
+
+    // 1) Mark current user as left in attendance.
+    const afterLeave = updateSessionAttendance(sessionId, (current) => {
       const attendance = (current.attendance || []).map((item) => {
         if (item.userName === user.fullName && !item.leftAt) {
-          const minutes = Number(((new Date(now).getTime() - new Date(item.joinedAt).getTime()) / 60000).toFixed(2));
-          return { ...item, leftAt: now, durationMinutes: Math.max(0, minutes) };
+          const minutes = Number(((new Date(nowIso).getTime() - new Date(item.joinedAt).getTime()) / 60000).toFixed(2));
+          return { ...item, leftAt: nowIso, durationMinutes: Math.max(0, minutes) };
         }
         return item;
       });
-      return { ...current, attendance, ...sessionAttendanceFields(attendance, now) };
+      return { ...current, attendance, ...sessionAttendanceFields(attendance, nowIso) };
     });
+
+    // 2) Settle verified-minute deltas per learner. Verified minutes = overlap where at
+    //    least 1 mentor AND that learner were both present; auto-pauses otherwise.
+    const session = afterLeave || activeMeeting;
+    const isCloud = session.id && session.teacherId && (session.fromCloud || session.cloudId || /^[0-9a-f-]{36}$/i.test(String(session.id)));
+    const ratePerMinute = getSessionCreditRate(session);
+    const settledMap = { ...(session.settledMinutesByLearner || {}) };
+    const joinedSeats = (session.joinedSeats || []).filter((s) => s.userId && s.userId !== session.teacherId);
+    const settlements = [];
+    const isTeacher = session.teacher === user.fullName || (session.teacherId && session.teacherId === user.id);
+
+    for (const seat of joinedSeats) {
+      const totalMinutes = learnerVerifiedMinutes(session.attendance || [], seat.userName, nowIso);
+      const already = Number(settledMap[seat.userName] || 0);
+      const deltaMinutes = Number(Math.max(0, totalMinutes - already).toFixed(2));
+      if (deltaMinutes <= 0) continue;
+      const deltaCredits = Number((deltaMinutes * ratePerMinute).toFixed(2));
+      if (deltaCredits <= 0) continue;
+      if (isCloud) {
+        try {
+          await supabase.rpc('session_settle_verified', { _session_id: session.id, _learner_id: seat.userId, _credits: deltaCredits });
+        } catch (err) {
+          setSessionNotice(`Settlement failed for ${seat.userName}: ${err.message || err}`);
+          continue;
+        }
+      }
+      settledMap[seat.userName] = Number((already + deltaMinutes).toFixed(2));
+      settlements.push({ learner: seat.userName, credits: deltaCredits, minutes: deltaMinutes });
+    }
+
+    if (settlements.length) {
+      updateSessionAttendance(sessionId, (current) => ({ ...current, settledMinutesByLearner: settledMap }));
+    }
+
+    // 3) Mirror the current user's side of the transfer in their local wallet.
+    let nextUser = user;
+    const localTxs = [];
+    if (settlements.length) {
+      const currentWallet = normalizeWallet(user.wallet);
+      if (isTeacher) {
+        const earned = settlements.reduce((s, x) => s + x.credits, 0);
+        const nextWallet = normalizeWallet({
+          ...currentWallet,
+          current: Number((currentWallet.current + earned).toFixed(2)),
+          earned: Number((currentWallet.earned + earned).toFixed(2)),
+        });
+        settlements.forEach((s) => localTxs.push({
+          id: crypto.randomUUID(), type: 'Earned',
+          title: `Teaching ${session.topic} • ${s.minutes} min verified • ${formatCredits(s.credits)} credits from ${s.learner}`,
+          amount: s.credits, date: nowIso.slice(0, 10),
+        }));
+        nextUser = { ...user, wallet: nextWallet };
+      } else {
+        const mine = settlements.find((s) => s.learner === user.fullName);
+        if (mine) {
+          const nextWallet = normalizeWallet({
+            ...currentWallet,
+            current: Number((currentWallet.current - mine.credits).toFixed(2)),
+            spent: Number((currentWallet.spent + mine.credits).toFixed(2)),
+          });
+          localTxs.push({
+            id: crypto.randomUUID(), type: 'Spent',
+            title: `Learning ${session.topic} • ${mine.minutes} min verified • ${formatCredits(mine.credits)} credits`,
+            amount: -mine.credits, date: nowIso.slice(0, 10),
+          });
+          nextUser = { ...user, wallet: nextWallet };
+        }
+      }
+    }
+    if (nextUser !== user) setUser(nextUser);
+    if (localTxs.length) setTransactions([...localTxs, ...transactions], nextUser);
+
     setActiveMeeting(null);
-    setSessionNotice(`Meeting left. Verified overlap so far: ${updated?.verifiedDurationMinutes || 0} minute(s).`);
+    const totalCredits = settlements.reduce((s, x) => s + x.credits, 0);
+    setSessionNotice(settlements.length
+      ? `Left meeting. Auto-settled ${formatCredits(totalCredits)} credit(s) across ${settlements.length} learner(s) using verified overlap minutes.`
+      : 'Left meeting. No new verified minutes to settle.');
   }
 
   // Compute verified overlap (in minutes) between mentor intervals and ONE specific learner's intervals.
@@ -3436,7 +3518,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
                 
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => openReschedule(session)}>Reschedule</button>}
                 {canTeach && role === 'mentor' && <button className="ghost" onClick={() => cancelSession(session)}>Cancel</button>}
-                {canTeach && role === 'mentor' && <button className="primary" onClick={() => completeSession(session)} disabled={session.status === 'Cancelled'}>Complete</button>}
+                
               </div>
             </div>
           );
@@ -3490,25 +3572,28 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
 
 
       {activeMeeting && (
-        <div className="modal-backdrop">
-          <div className="modal card meeting-room">
+        <div className="modal-backdrop meeting-backdrop">
+          <div className="modal card meeting-room" ref={meetingRoomRef}>
             <div className="section-title">
               <h2>Know-how Meeting Room</h2>
-              <StatusBadge status="Ongoing" />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <StatusBadge status="Ongoing" />
+                <button className="ghost" type="button" onClick={toggleMeetingFullscreen}>⛶ Fullscreen</button>
+              </div>
             </div>
             <div className="call-box video-call-box">
               <div className="video-call-header">
                 <div><h3>{activeMeeting.topic}</h3><p>Room: {buildJitsiRoomName(getSessionRoom(activeMeeting))}</p></div>
-                <a className="primary small-link" href={activeMeeting.meetingLink || buildMeetingUrl(getSessionRoom(activeMeeting))} target="_blank" rel="noreferrer">Open call tab</a>
               </div>
               <iframe
                 className="jitsi-frame"
                 title={`Session room ${getSessionRoom(activeMeeting)}`}
                 src={activeMeeting.meetingLink || buildMeetingUrl(getSessionRoom(activeMeeting))}
                 allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+                allowFullScreen
               />
             </div>
-            <p className="muted-text">You joined as {getParticipantRole(activeMeeting, user)}. Both devices must use this same saved meeting link. Screen share is available inside the call toolbar.</p>
+            <p className="muted-text">You joined as {getParticipantRole(activeMeeting, user)}. Credits are settled automatically when you leave, based on verified overlap minutes (only counted when at least one mentor and one learner are both in the room).</p>
             <LiveAttendanceSummary activeMeeting={activeMeeting} />
             <button className="danger full" onClick={leaveMeeting}>Leave Meeting</button>
           </div>
