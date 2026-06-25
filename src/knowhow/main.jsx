@@ -3915,6 +3915,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
   const [activeFilter, setActiveFilter] = useState('solo');
   const [messageSearch, setMessageSearch] = useState('');
   const [composerMode, setComposerMode] = useState('message');
+  const [chatProfileOpen, setChatProfileOpen] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState({
     topic: 'English Speaking',
     date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
@@ -4098,7 +4099,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
 
         <section className="messages-chat-panel">
           <header className="messages-chat-header messenger-chat-title">
-            <div className="profile-head no-margin">
+            <div className="profile-head no-margin" style={{ cursor: activeProfile ? 'pointer' : 'default' }} onClick={() => { if (activeProfile) setChatProfileOpen(true); }}>
               <Avatar text={activeProfile?.avatar || getInitials(activeContact)} />
               <div><h3>{activeContact}</h3><p className="muted-text">{activeProfile ? `@${activeProfile.username} • ${activeProfile.region || 'Region hidden'}` : 'Community conversation'} • Active now</p></div>
             </div>
@@ -4132,7 +4133,7 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
             {activeMessages.length === 0 && <p className="muted-text center-text">No messages yet. Start a conversation.</p>}
             {activeMessages.map((message) => (
               <div className={`bubble-row ${message.direction === 'outgoing' ? 'me' : 'them'}`} key={message.id}>
-                {message.direction !== 'outgoing' && <Avatar text={activeProfile?.avatar || getInitials(activeContact)} />}
+                {message.direction !== 'outgoing' && <span style={{ cursor: activeProfile ? 'pointer' : 'default' }} onClick={() => { if (activeProfile) setChatProfileOpen(true); }}><Avatar text={activeProfile?.avatar || getInitials(activeContact)} /></span>}
                 <div className={`bubble ${message.direction === 'outgoing' ? 'outgoing' : 'incoming'}`}>
                   {message.attachment && <MediaPreview attachment={message.attachment} />}
                   <p>{message.body}</p>
@@ -4151,6 +4152,31 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
           </div>
         </section>
       </div>
+      {chatProfileOpen && activeProfile && (
+        <div className="modal-backdrop high-modal-backdrop" onClick={() => setChatProfileOpen(false)}>
+          <div className="modal card search-profile-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="section-title">
+              <h3>User Profile</h3>
+              <button className="ghost" type="button" onClick={() => setChatProfileOpen(false)}>Close</button>
+            </div>
+            <div className="profile-head">
+              <Avatar text={activeProfile.avatar || getInitials(activeProfile.fullName || activeContact)} large />
+              <div>
+                <h2>{activeProfile.fullName || activeContact}</h2>
+                <p>@{activeProfile.username || '—'} • {activeProfile.region || 'Region hidden'}</p>
+                {activeProfile.role && <p className="muted-text">{activeProfile.role}</p>}
+              </div>
+            </div>
+            {activeProfile.bio && <p>{activeProfile.bio}</p>}
+            {(activeProfile.languages?.length || activeProfile.interests?.length) ? (
+              <div className="pill-wrap left">
+                {(activeProfile.languages || []).map((item) => <span className="pill muted" key={`lang-${item}`}>{item}</span>)}
+                {(activeProfile.interests || []).map((item) => <span className="pill" key={`int-${item}`}>{item}</span>)}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
