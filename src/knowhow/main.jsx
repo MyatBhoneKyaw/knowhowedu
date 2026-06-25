@@ -5744,6 +5744,7 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
   ];
   const [selectedUserId, setSelectedUserId] = useState(adminUsers[0]?.id);
   const [selectedApplicationId, setSelectedApplicationId] = useState(normalizedApplications[0]?.id);
+  const [applicationModalOpen, setApplicationModalOpen] = useState(false);
   const [adminNote, setAdminNote] = useState('');
   const [adminNotice, setAdminNotice] = useState('');
   const [reports, setReports] = useState([]);
