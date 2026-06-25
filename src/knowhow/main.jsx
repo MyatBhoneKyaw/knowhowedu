@@ -794,8 +794,23 @@ async function adminApiRequest(path, options = {}) {
     return camel(ok(data, error));
   }
   if ((r = m(/^\/admin\/users\/([^/]+)\/suspend$/)) && method === 'PATCH') {
-    const { data, error } = await supabase.from('profiles').update({ is_suspended: !!body?.suspend }).eq('id', r[1]).select('*').maybeSingle();
-    return camel(ok(data, error));
+    const token = sessionData?.session?.access_token;
+    const res = await fetch(`/api/admin/users/${r[1]}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ suspend: !!body?.suspend }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed to suspend');
+    return res.json();
+  }
+  if ((r = m(/^\/admin\/users\/([^/]+)$/)) && method === 'DELETE') {
+    const token = sessionData?.session?.access_token;
+    const res = await fetch(`/api/admin/users/${r[1]}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed to delete');
+    return res.json();
   }
   if (path === '/admin/sessions' && method === 'GET') {
     const { data, error } = await supabase.from('sessions').select('*').order('created_at', { ascending: false }).limit(200);
