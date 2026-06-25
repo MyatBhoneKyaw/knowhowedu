@@ -3124,6 +3124,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
   const [sessionEndAd, setSessionEndAd] = useState(null);
+  const [pendingReview, setPendingReview] = useState(null);
 
   // Keep the active meeting in sync with the global sessions list (cloud polling refreshes attendance).
   useEffect(() => {
@@ -3567,6 +3568,9 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
 
     setActiveMeeting(null);
     setSessionEndAd(pickRandomAd());
+    if (!isTeacher && session.teacherId && session.teacherId !== user.id) {
+      setPendingReview({ sessionId: session.id, teacherId: session.teacherId, teacherName: session.teacher || 'Teacher', topic: session.topic });
+    }
 
     const totalCredits = settlements.reduce((s, x) => s + x.credits, 0);
     setSessionNotice(settlements.length
@@ -3843,8 +3847,72 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       {sessionEndAd && (
         <AdOverlay ad={sessionEndAd} placement="After session" onClose={() => setSessionEndAd(null)} />
       )}
+      {!sessionEndAd && pendingReview && (
+        <SessionRatingModal
+          review={pendingReview}
+          onClose={() => setPendingReview(null)}
+          onSubmit={async ({ rating, comment }) => {
+            try {
+              await apiRequest('/reviews', { method: 'POST', body: JSON.stringify({
+                revieweeId: pendingReview.teacherId,
+                sessionId: pendingReview.sessionId,
+                rating,
+                comment,
+              }) });
+              setSessionNotice(`Thanks for rating ${pendingReview.teacherName}!`);
+              try { notify(pendingReview.teacherId, { category: 'reminder', title: `New ${rating}★ review`, body: `${user.fullName} rated your session "${pendingReview.topic}".` }); } catch {}
+            } catch (err) {
+              setSessionNotice(`Could not submit rating: ${err.message || err}`);
+            } finally {
+              setPendingReview(null);
+            }
+          }}
+        />
+      )}
 
     </section>
+  );
+}
+
+function SessionRatingModal({ review, onClose, onSubmit }) {
+  const [rating, setRating] = useState(5);
+  const [hover, setHover] = useState(0);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+        <h3 style={{ margin: '0 0 4px' }}>Rate your teacher</h3>
+        <p className="muted-text" style={{ marginTop: 0 }}>How was <strong>{review.teacherName}</strong>'s session{review.topic ? ` on "${review.topic}"` : ''}?</p>
+        <div style={{ display: 'flex', gap: 6, fontSize: 34, cursor: 'pointer', userSelect: 'none', justifyContent: 'center', margin: '12px 0' }}>
+          {[1,2,3,4,5].map((n) => (
+            <span
+              key={n}
+              onMouseEnter={() => setHover(n)}
+              onMouseLeave={() => setHover(0)}
+              onClick={() => setRating(n)}
+              style={{ color: (hover || rating) >= n ? '#f5b301' : '#d0d4dc', transition: 'color 0.15s' }}
+              aria-label={`${n} star${n>1?'s':''}`}
+            >★</span>
+          ))}
+        </div>
+        <textarea
+          className="input"
+          placeholder="Share a quick note (optional)"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={3}
+          style={{ width: '100%', resize: 'vertical' }}
+        />
+        <div className="actions" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+          <button type="button" className="ghost" onClick={onClose} disabled={busy}>Skip</button>
+          <button type="button" className="primary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            await onSubmit({ rating, comment: comment.trim() });
+          }}>{busy ? 'Submitting…' : 'Submit rating'}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
