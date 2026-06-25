@@ -3136,20 +3136,24 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
         </div>
         <div className="card">
           <h3>Money Exchange</h3>
-          <p className="muted-text">Bulk credit packs at a discounted rate.</p>
+          <p className="muted-text">Convert your credits into cash deposited to your credit card.</p>
           <div className="list">
             {[
-              { id: 'exchange-100', title: '100 Credits', credits: 100, price: '$3' },
-              { id: 'exchange-200', title: '200 Credits', credits: 200, price: '$6' },
-              { id: 'exchange-300', title: '300 Credits', credits: 300, price: '$10' },
-            ].map((product) => (
-              <div className="skill-row" key={product.id}>
-                <div><strong>{product.title}</strong><span>{product.price} • {product.credits} credits</span></div>
-                <button className="primary" type="button" onClick={() => openPayment(product)}>Exchange</button>
-              </div>
-            ))}
+              { id: 'exchange-100', title: '100 Credits → $3', credits: 100, payout: 3, productType: 'exchange' },
+              { id: 'exchange-200', title: '200 Credits → $6', credits: 200, payout: 6, productType: 'exchange' },
+              { id: 'exchange-300', title: '300 Credits → $10', credits: 300, payout: 10, productType: 'exchange' },
+            ].map((product) => {
+              const insufficient = wallet.current < product.credits;
+              return (
+                <div className="skill-row" key={product.id}>
+                  <div><strong>{product.title}</strong><span>Pays ${product.payout} to your card • costs {product.credits} credits</span></div>
+                  <button className="primary" type="button" disabled={insufficient} onClick={() => openPayment(product)}>{insufficient ? 'Not enough' : 'Exchange'}</button>
+                </div>
+              );
+            })}
           </div>
         </div>
+
       </div>
       <div className="card">
 
