@@ -6008,9 +6008,12 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
       </div>
 
       <div className="card">
-        <h3>Session Monitoring</h3>
-        <div className="list">{sessions.map((session) => <SessionMini key={session.id} session={session} />)}</div>
+        <details>
+          <summary className="section-title" style={{ cursor: 'pointer', listStyle: 'revert' }}><h3 style={{ display: 'inline' }}>Session Monitoring</h3><span className="pill muted">{sessions.length} session(s)</span></summary>
+          <div className="list" style={{ marginTop: 12 }}>{sessions.map((session) => <SessionMini key={session.id} session={session} />)}</div>
+        </details>
       </div>
+
       {profileModalUser && (
         <div className="modal-backdrop high-modal-backdrop" onClick={() => setProfileModalUserId(null)}>
           <div className="modal card search-profile-modal" onClick={(event) => event.stopPropagation()}>
