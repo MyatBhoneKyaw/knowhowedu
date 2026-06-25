@@ -2749,7 +2749,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
             </div>
             <div className="summary-box">
               <strong>{paymentProduct.title}</strong>
-              <span>{paymentProduct.price} - {paymentProduct.credits ? `${paymentProduct.credits} credits` : 'lecture video access'}</span>
+              <span>{paymentProduct.price} - {paymentProduct.credits} credit{paymentProduct.credits === 1 ? '' : 's'}</span>
             </div>
             <label>Name on Card</label>
             <input value={paymentDraft.name} onChange={(event) => setPaymentDraft({ ...paymentDraft, name: event.target.value })} placeholder="Cardholder name" autoComplete="cc-name" required />
