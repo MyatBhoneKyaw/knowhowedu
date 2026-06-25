@@ -362,6 +362,88 @@ async function deleteSkill(table, id) {
 }
 
 // ----- Sessions -----
+function localToCloudSession(local) {
+  // Combine date + time into a single timestamp for the date column.
+  let when = local.date || null;
+  if (when && local.time) when = `${local.date}T${local.time}:00`;
+  const durationHours = Number(local.duration || (Number(local.durationMinutes || 0) / 60).toFixed(2)) || 0;
+  return {
+    id: local.id,
+    skill_topic: local.topic || null,
+    date: when,
+    duration_hours: durationHours,
+    room_id: local.roomId || null,
+    meeting_link: local.meetingLink || null,
+    meeting_provider: local.meetingProvider || null,
+    meeting_space_name: local.meetingSpaceName || null,
+    notes: local.notes || null,
+    credit_amount: Number(local.credits || 0) || 0,
+    credit_rate_per_minute: local.creditRatePerMinute || null,
+    teacher_level: local.teacherLevel || null,
+    student_limit: Number(local.studentLimit || 1),
+    seats_available: Number(local.seatsAvailable ?? local.studentLimit ?? 1),
+    status: local.status || 'Pending',
+    learning_summary: {
+      topic: local.topic,
+      teacher: local.teacher,
+      learner: local.learner,
+      date: local.date,
+      time: local.time,
+      durationMinutes: local.durationMinutes,
+      teacherLevelLabel: local.teacherLevel,
+      teacherRating: local.teacherRating,
+      teacherLevelNumber: local.teacherLevelNumber,
+      language: local.language,
+      joinedSeats: local.joinedSeats || [],
+      attendance: local.attendance || [],
+      notes: local.notes,
+      createdByRole: local.createdByRole,
+      creatorOnly: local.creatorOnly,
+    },
+  };
+}
+function cloudToLocalSession(row) {
+  if (!row) return null;
+  const summary = (row.learning_summary && typeof row.learning_summary === 'object') ? row.learning_summary : {};
+  const isoDate = row.date ? new Date(row.date) : null;
+  const dateStr = summary.date || (isoDate ? isoDate.toISOString().slice(0, 10) : '');
+  const timeStr = summary.time || (isoDate ? isoDate.toISOString().slice(11, 16) : '');
+  const durationMinutes = summary.durationMinutes || Math.round(Number(row.duration_hours || 0) * 60);
+  return {
+    id: row.id,
+    cloudId: row.id,
+    topic: summary.topic || row.skill_topic || 'Teaching session',
+    teacher: summary.teacher || '',
+    learner: summary.learner || 'Learner pending',
+    date: dateStr,
+    time: timeStr,
+    duration: Number(row.duration_hours || 0),
+    durationMinutes,
+    credits: Number(row.credit_amount || 0),
+    creditRatePerMinute: row.credit_rate_per_minute,
+    studentLimit: row.student_limit,
+    seatsAvailable: row.seats_available,
+    teacherLevel: row.teacher_level || summary.teacherLevelLabel || 'Approved Teacher',
+    teacherRating: summary.teacherRating,
+    teacherLevelNumber: summary.teacherLevelNumber,
+    language: summary.language,
+    status: row.status || 'Pending',
+    roomId: row.room_id,
+    meetingLink: row.meeting_link,
+    meetingProvider: row.meeting_provider,
+    meetingSpaceName: row.meeting_space_name,
+    notes: row.notes || summary.notes || '',
+    joinedSeats: summary.joinedSeats || [],
+    attendance: summary.attendance || [],
+    createdByRole: summary.createdByRole,
+    creatorOnly: summary.creatorOnly,
+    teacherId: row.teacher_id,
+    learnerId: row.learner_id,
+    requestedBy: row.requested_by,
+    completedAt: row.completed_at,
+    fromCloud: true,
+  };
+}
 async function listMySessions() {
   const uid = await requireUid();
   const { data, error } = await supabase.from('sessions').select('*')
@@ -369,26 +451,43 @@ async function listMySessions() {
     .order('date', { ascending: false });
   return camel(ok(data, error));
 }
+async function listActiveSessions() {
+  const { data, error } = await supabase.from('sessions').select('*')
+    .order('date', { ascending: true })
+    .limit(500);
+  if (error) throw new Error(error.message);
+  // Filter non-completed/cancelled on client to be safe.
+  return (data || [])
+    .filter((r) => !['completed','cancelled'].includes(String(r.status || '').toLowerCase()))
+    .map(cloudToLocalSession);
+}
 async function createSession(body) {
   const uid = await requireUid();
-  const row = snake(body);
+  const row = localToCloudSession(body);
   row.requested_by = uid;
   if (!row.room_id) row.room_id = `kh-${Math.random().toString(36).slice(2, 10)}`;
   if (!row.teacher_id) row.teacher_id = uid;
   const { data, error } = await supabase.from('sessions').insert(row).select('*').maybeSingle();
-  return camel(ok(data, error));
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
 async function updateSessionStatus(id, body) {
   if (body.status === 'completed') {
     const { data, error } = await supabase.rpc('session_complete', { _session_id: id });
-    return camel(ok(data, error));
+    if (error) throw new Error(error.message);
+    return cloudToLocalSession(data);
   }
-  const { data, error } = await supabase.from('sessions').update(snake(body)).eq('id', id).select('*').maybeSingle();
-  return camel(ok(data, error));
+  const patch = { status: body.status };
+  if (body.learningSummary) patch.learning_summary = body.learningSummary;
+  if (body.seatsAvailable !== undefined) patch.seats_available = body.seatsAvailable;
+  const { data, error } = await supabase.from('sessions').update(patch).eq('id', id).select('*').maybeSingle();
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
-async function joinSessionSeat(id) {
-  const { data, error } = await supabase.rpc('session_join_seat', { _session_id: id });
-  return camel(ok(data, error));
+async function joinSessionSeat(id, body = {}) {
+  const { data, error } = await supabase.rpc('session_join_seat_v2', { _session_id: id, _user_name: body.userName || '' });
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
 
 // ----- Messages -----
