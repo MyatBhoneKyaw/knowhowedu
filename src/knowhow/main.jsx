@@ -2592,7 +2592,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const alreadyClaimed = dailyState.lastClaim === today;
   const nextStreak = dailyState.lastClaim === yesterday ? Math.min((dailyState.streak || 0) + 1, 7) : 1;
-  const rewardAmount = Number((0.25 + (nextStreak - 1) * 0.05).toFixed(2));
+  const rewardAmount = Number((1 + (nextStreak - 1) * (0.5 / 6)).toFixed(2));
 
   function claimDailyReward() {
     setWalletNotice('');
@@ -2759,11 +2759,11 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
       {walletNotice && <div className="notice">{walletNotice}</div>}
       <div className="card">
         <h3>Daily Credit Reward</h3>
-        <p className="muted-text">Claim a free credit bonus every day. Keep your streak alive for bigger rewards (cap +0.55 at a 7-day streak).</p>
+        <p className="muted-text">Claim a free credit bonus every day. Keep your streak alive for bigger rewards (cap +0.5 at a 7-day streak).</p>
         <div className="stats-grid">
           <StatCard label="Current Streak" value={`${dailyState.streak || 0} day${(dailyState.streak || 0) === 1 ? '' : 's'}`} hint={alreadyClaimed ? `Last claimed ${dailyState.lastClaim}` : 'Claim today to grow it'} />
           <StatCard label="Today's Reward" value={`+${rewardAmount}`} hint={alreadyClaimed ? 'Already claimed today' : `Day ${nextStreak} bonus available`} />
-          <StatCard label="Max Streak Bonus" value="+0.55" hint="Reach a 7-day streak" />
+          <StatCard label="Max Streak Bonus" value="+0.5" hint="Reach a 7-day streak" />
         </div>
         <div className="actions wrap">
           <button className="primary" type="button" onClick={claimDailyReward} disabled={alreadyClaimed}>
