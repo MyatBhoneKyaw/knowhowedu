@@ -4,6 +4,7 @@ import './styles.css';
 import knowhowLogo from './knowhow-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable';
+import { NotificationBell, notify } from './notifications.jsx';
 
 
 // Lovable Cloud (Supabase) backend — replaces the legacy MongoDB API.
