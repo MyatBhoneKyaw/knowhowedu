@@ -3071,18 +3071,42 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
 
   function purchase(product, cardLastFour = '') {
     setWalletNotice('');
-    const nextWallet = product.productType === 'lecture_video'
-      ? normalizeWallet({ ...wallet, lectureAccess: (wallet.lectureAccess || 0) + 1 })
-      : normalizeWallet({
-          ...wallet,
-          current: Number((wallet.current + product.credits).toFixed(2)),
-          purchased: Number(((wallet.purchased || 0) + product.credits).toFixed(2)),
-        });
+    let nextWallet;
+    if (product.productType === 'lecture_video') {
+      nextWallet = normalizeWallet({ ...wallet, lectureAccess: (wallet.lectureAccess || 0) + 1 });
+    } else if (product.productType === 'exchange') {
+      if (wallet.current < product.credits) {
+        setWalletNotice(`Not enough credits to exchange. You need ${product.credits}.`);
+        return;
+      }
+      nextWallet = normalizeWallet({
+        ...wallet,
+        current: Number((wallet.current - product.credits).toFixed(2)),
+        spent: Number(((wallet.spent || 0) + product.credits).toFixed(2)),
+      });
+    } else {
+      nextWallet = normalizeWallet({
+        ...wallet,
+        current: Number((wallet.current + product.credits).toFixed(2)),
+        purchased: Number(((wallet.purchased || 0) + product.credits).toFixed(2)),
+      });
+    }
     const nextUser = { ...user, wallet: nextWallet };
-    addTransaction('Purchase', product.title, product.productType === 'lecture_video' ? 0 : product.credits, nextUser);
-    const paidWith = cardLastFour ? ` Card ending ${cardLastFour} accepted.` : '';
-    setWalletNotice(product.productType === 'lecture_video' ? `Lecture video access added. Credit balance was not changed.${paidWith}` : `${product.credits} credits purchased successfully.${paidWith}`);
+    const txAmount = product.productType === 'lecture_video' ? 0
+      : product.productType === 'exchange' ? -product.credits
+      : product.credits;
+    const txType = product.productType === 'exchange' ? 'Exchange' : 'Purchase';
+    addTransaction(txType, product.title, txAmount, nextUser);
+    const paidWith = cardLastFour ? ` Card ending ${cardLastFour}.` : '';
+    if (product.productType === 'lecture_video') {
+      setWalletNotice(`Lecture video access added. Credit balance was not changed.${paidWith}`);
+    } else if (product.productType === 'exchange') {
+      setWalletNotice(`$${product.payout} deposited to card ending ${cardLastFour || '••••'}. ${product.credits} credits deducted.`);
+    } else {
+      setWalletNotice(`${product.credits} credits purchased successfully.${paidWith}`);
+    }
   }
+
 
   return (
     <section>
