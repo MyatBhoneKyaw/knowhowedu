@@ -457,13 +457,35 @@ async function listMySessions() {
 }
 async function listActiveSessions() {
   const { data, error } = await supabase.from('sessions').select('*')
-    .order('date', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(500);
   if (error) throw new Error(error.message);
-  // Filter non-completed/cancelled on client to be safe.
   return (data || [])
     .filter((r) => !['completed','cancelled'].includes(String(r.status || '').toLowerCase()))
     .map(cloudToLocalSession);
+}
+async function deleteSession(id) {
+  const { error } = await supabase.from('sessions').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return { id, deleted: true };
+}
+async function rescheduleSession(id, body) {
+  const patch = {};
+  if (body.date) {
+    patch.date = body.time ? `${body.date}T${body.time}:00` : body.date;
+  }
+  if (body.durationMinutes) patch.duration_hours = Number((Number(body.durationMinutes) / 60).toFixed(2));
+  patch.status = 'Rescheduled';
+  // Merge into learning_summary so client display picks up the new date/time strings.
+  const { data: existing } = await supabase.from('sessions').select('learning_summary').eq('id', id).maybeSingle();
+  const nextSummary = { ...((existing && existing.learning_summary) || {}) };
+  if (body.date) nextSummary.date = body.date;
+  if (body.time) nextSummary.time = body.time;
+  if (body.durationMinutes) nextSummary.durationMinutes = Number(body.durationMinutes);
+  patch.learning_summary = nextSummary;
+  const { data, error } = await supabase.from('sessions').update(patch).eq('id', id).select('*').maybeSingle();
+  if (error) throw new Error(error.message);
+  return cloudToLocalSession(data);
 }
 async function createSession(body) {
   const uid = await requireUid();
