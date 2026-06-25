@@ -2893,7 +2893,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       <PageHeader title="Sessions" subtitle="Search sessions by teacher or topic, then join a seat before it becomes full." action={canTeach ? <button className="primary" onClick={() => { setSessionNotice(''); setShowDialog(true); }}>Create Teaching Session</button> : <span className="status pending">Join seat mode</span>} />
       <div className="card sessions-search-card">
         <label className="sessions-search-box"><span>⌕</span><input value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value)} placeholder="Search by teacher name or topic..." /></label>
-        <span className="pill muted">{visibleSessions.length}/{activeSessions.length} session(s)</span>
+        
       </div>
       {sessionNotice && <div className="notice">{sessionNotice}</div>}
       {completedCount > 0 && <div className="summary-box"><strong>{completedCount} completed session(s)</strong> are hidden from this active list.</div>}
