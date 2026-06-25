@@ -1497,6 +1497,7 @@ function App() {
             const prof = p.profile || {};
             const initials = (p.fullName || p.username || '?')
               .split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+            const resolvedRole = roleLabel(p.rawRole || p.role || 'learner');
             return {
               id: p.id,
               fullName: p.fullName || p.username,
@@ -1513,6 +1514,10 @@ function App() {
               offered: prof.skillsOffered || [],
               wanted: prof.skillsWanted || [],
               email: p.email,
+              role: resolvedRole,
+              rawRole: p.rawRole || p.role || 'learner',
+              teachingProfile: p.teachingProfile || {},
+              teacherLevel: p.teachingProfile?.level || (resolvedRole !== 'Learner' ? resolvedRole : ''),
               isCloudUser: true,
             };
           });
