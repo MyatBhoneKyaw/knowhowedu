@@ -14,16 +14,186 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          badges: Json
+          created_at: string
+          daily_streak: number
+          email: string
+          full_name: string
+          id: string
+          learning_profile: Json
+          profile: Json
+          raw_role: string
+          subject_levels: Json
+          teaching_profile: Json
+          two_factor_enabled: boolean
+          updated_at: string
+          username: string
+          xp: number
+        }
+        Insert: {
+          badges?: Json
+          created_at?: string
+          daily_streak?: number
+          email: string
+          full_name?: string
+          id: string
+          learning_profile?: Json
+          profile?: Json
+          raw_role?: string
+          subject_levels?: Json
+          teaching_profile?: Json
+          two_factor_enabled?: boolean
+          updated_at?: string
+          username: string
+          xp?: number
+        }
+        Update: {
+          badges?: Json
+          created_at?: string
+          daily_streak?: number
+          email?: string
+          full_name?: string
+          id?: string
+          learning_profile?: Json
+          profile?: Json
+          raw_role?: string
+          subject_levels?: Json
+          teaching_profile?: Json
+          two_factor_enabled?: boolean
+          updated_at?: string
+          username?: string
+          xp?: number
+        }
+        Relationships: []
+      }
+      teacher_applications: {
+        Row: {
+          admin_note: string | null
+          authority_name: string | null
+          created_at: string
+          cv_url: string | null
+          id: string
+          learner_level: string | null
+          license_url: string | null
+          linked_in_url: string | null
+          note: string | null
+          requested_role: string
+          reviewed_at: string | null
+          status: string
+          subject: string
+          teacher_level_claim: string | null
+          user_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          authority_name?: string | null
+          created_at?: string
+          cv_url?: string | null
+          id?: string
+          learner_level?: string | null
+          license_url?: string | null
+          linked_in_url?: string | null
+          note?: string | null
+          requested_role: string
+          reviewed_at?: string | null
+          status?: string
+          subject: string
+          teacher_level_claim?: string | null
+          user_id: string
+        }
+        Update: {
+          admin_note?: string | null
+          authority_name?: string | null
+          created_at?: string
+          cv_url?: string | null
+          id?: string
+          learner_level?: string | null
+          license_url?: string | null
+          linked_in_url?: string | null
+          note?: string | null
+          requested_role?: string
+          reviewed_at?: string | null
+          status?: string
+          subject?: string
+          teacher_level_claim?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wallets: {
+        Row: {
+          current_credits: number
+          earned_credits: number
+          lecture_access: number
+          loan_due_date: string | null
+          loan_outstanding: number
+          purchased_credits: number
+          spent_credits: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_credits?: number
+          earned_credits?: number
+          lecture_access?: number
+          loan_due_date?: string | null
+          loan_outstanding?: number
+          purchased_credits?: number
+          spent_credits?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_credits?: number
+          earned_credits?: number
+          lecture_access?: number
+          loan_due_date?: string | null
+          loan_outstanding?: number
+          purchased_credits?: number
+          spent_credits?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +320,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
