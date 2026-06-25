@@ -5103,7 +5103,7 @@ function VideoPanelPage({ user, setUser }) {
                 probe.onloadedmetadata = () => {
                   const seconds = Math.max(1, Math.round(probe.duration || 0));
                   const minutes = Math.max(1, Math.ceil(seconds / 60));
-                  const credits = Math.max(1, Math.ceil(minutes / 15));
+                  const credits = Math.max(1, Math.ceil(minutes / 30));
                   const label = minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes} min`;
                   setUploadForm((prev) => ({ ...prev, file, durationLabel: label, priceCredits: credits }));
                   URL.revokeObjectURL(url);
@@ -5114,7 +5114,8 @@ function VideoPanelPage({ user, setUser }) {
                 };
               }} /></label>
               {uploadForm.file && (
-                <p className="muted-text" style={{ margin: 0 }}>Detected duration: <strong>{uploadForm.durationLabel}</strong> • Auto price: <strong>{uploadForm.priceCredits} credit{uploadForm.priceCredits === 1 ? '' : 's'}</strong> (1 credit per 15 min)</p>
+                <p className="muted-text" style={{ margin: 0 }}>Detected duration: <strong>{uploadForm.durationLabel}</strong> • Auto price: <strong>{uploadForm.priceCredits} credit{uploadForm.priceCredits === 1 ? '' : 's'}</strong> (1 credit per 30 min)</p>
+
               )}
               
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
