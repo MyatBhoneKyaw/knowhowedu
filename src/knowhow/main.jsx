@@ -5286,6 +5286,8 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
   const [adminNotice, setAdminNotice] = useState('');
   const [reports, setReports] = useState([]);
   const [reportsNotice, setReportsNotice] = useState('');
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
+  const profileModalUser = profileModalUserId ? adminUsers.find((item) => item.id === profileModalUserId) : null;
 
   async function loadReports() {
     try {
