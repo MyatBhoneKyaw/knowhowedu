@@ -1201,8 +1201,9 @@ const INITIAL_COMMUNITY_POSTS = [
 const INITIAL_QUESTS = [];
 
 const CREDIT_PRODUCTS = [
-  { id: 'cp01', title: '5 Credit Points', credits: 5, price: '$5 demo', productType: 'credit_points' },
-  { id: 'cp02', title: 'Lecture Video Pack', credits: 0, price: '$9 demo', productType: 'lecture_video' },
+  { id: 'cp01', title: '1 Credit Point', credits: 1, price: '$5', productType: 'credit_points' },
+  { id: 'cp02', title: '3 Credit Points', credits: 3, price: '$14', productType: 'credit_points' },
+  { id: 'cp03', title: '5 Credit Points', credits: 5, price: '$22', productType: 'credit_points' },
 ];
 
 const LECTURE_VIDEOS = [
