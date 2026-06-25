@@ -5037,7 +5037,7 @@ function VideoPanelPage({ user, setUser }) {
                 <label>Price (credits)<input type="number" min="0" step="0.25" value={uploadForm.priceCredits} onChange={(e) => setUploadForm({ ...uploadForm, priceCredits: e.target.value })} /></label>
               </div>
               <label>Video file<input type="file" accept="video/*" onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files?.[0] || null })} /></label>
-              <label>…or paste a video URL<input value={uploadForm.videoUrl} onChange={(e) => setUploadForm({ ...uploadForm, videoUrl: e.target.value })} placeholder="https://..." /></label>
+              
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
                 <button type="button" className="ghost" onClick={() => setShowUpload(false)}>Cancel</button>
                 <button type="submit" className="primary">Publish</button>
