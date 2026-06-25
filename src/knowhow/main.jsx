@@ -5432,14 +5432,52 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
         <div className="card">
           <h3>User Management</h3>
           <div className="list">
-            {adminUsers.map((person) => (
-              <div className={`skill-row selectable ${selectedUserId === person.id ? 'selected' : ''}`} key={`${person.id}-${person.username}`} onClick={() => setSelectedUserId(person.id)}>
-                <div><strong>{person.fullName}</strong><span>@{person.username} • {person.role} • {person.status} • License: {person.license}</span></div>
-                <div className="actions inline"><button className="ghost" type="button" onClick={(event) => { event.stopPropagation(); setProfileModalUserId(person.id); }}>View</button><button className="danger" type="button" onClick={(event) => event.stopPropagation()}>Suspend</button></div>
-              </div>
-            ))}
+            {adminUsers.filter((person) => !removedUserIds.has(person.id)).map((person) => {
+              const isSuspended = suspendedUserIds.has(person.id);
+              const busy = userActionBusy === person.id;
+              return (
+                <div className={`skill-row selectable ${selectedUserId === person.id ? 'selected' : ''}`} key={`${person.id}-${person.username}`} onClick={() => setSelectedUserId(person.id)}>
+                  <div><strong>{person.fullName}</strong><span>@{person.username} • {person.role} • {isSuspended ? 'Suspended' : person.status} • License: {person.license}</span></div>
+                  <div className="actions inline">
+                    <button className="ghost" type="button" onClick={(event) => { event.stopPropagation(); setProfileModalUserId(person.id); }}>View</button>
+                    <button className="ghost" type="button" disabled={busy} onClick={async (event) => {
+                      event.stopPropagation();
+                      setUserActionBusy(person.id);
+                      try {
+                        await adminApiRequest(`/admin/users/${person.id}/suspend`, { method: 'PATCH', body: JSON.stringify({ suspend: !isSuspended }) });
+                        setSuspendedUserIds((prev) => {
+                          const next = new Set(prev);
+                          if (isSuspended) next.delete(person.id); else next.add(person.id);
+                          return next;
+                        });
+                        setAdminNotice(`${person.fullName} ${isSuspended ? 'reactivated' : 'suspended'}.`);
+                      } catch (error) {
+                        setAdminNotice(`Suspend failed: ${error.message}`);
+                      } finally {
+                        setUserActionBusy(null);
+                      }
+                    }}>{isSuspended ? 'Unsuspend' : 'Suspend'}</button>
+                    <button className="danger" type="button" disabled={busy} onClick={async (event) => {
+                      event.stopPropagation();
+                      if (!window.confirm(`Permanently delete ${person.fullName}? This removes their account and all related data.`)) return;
+                      setUserActionBusy(person.id);
+                      try {
+                        await adminApiRequest(`/admin/users/${person.id}`, { method: 'DELETE' });
+                        setRemovedUserIds((prev) => new Set(prev).add(person.id));
+                        setAdminNotice(`${person.fullName} deleted.`);
+                      } catch (error) {
+                        setAdminNotice(`Delete failed: ${error.message}`);
+                      } finally {
+                        setUserActionBusy(null);
+                      }
+                    }}>Delete</button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
+
 
         <div className="card user-account-view">
           <div className="section-title"><h3>User Account View</h3><StatusBadge status={selectedUser.status} /></div>
