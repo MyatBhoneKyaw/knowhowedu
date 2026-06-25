@@ -3042,6 +3042,15 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       setSessionNotice('This session is full.');
       return;
     }
+    // Credit check: a learner must hold at least the session's credit cost before joining a seat.
+    const isTeacherSelf = getParticipantRole(session, user) === 'mentor';
+    const sessionCost = Number(session.credits ?? getBillableCredits(session) ?? 0);
+    const currentCredits = Number(normalizeWallet(user.wallet).current || 0);
+    if (!isTeacherSelf && sessionCost > 0 && currentCredits < sessionCost) {
+      setSessionNotice(`You need ${formatCredits(sessionCost)} credits to join this seat (you have ${formatCredits(currentCredits)}). Redirecting to the credit loan page…`);
+      if (typeof setPage === 'function') window.setTimeout(() => setPage('wallet'), 700);
+      return;
+    }
     const nextSessions = sessions.map((item) => {
       if (item.id !== session.id) return item;
       const nextJoinedSeats = [
