@@ -2039,6 +2039,31 @@ function AuthScreen({ onAuthSuccess }) {
   );
 }
 
+function useDailyRewardAvailable(userId) {
+  const compute = () => {
+    if (!userId) return false;
+    try {
+      const raw = JSON.parse(localStorage.getItem(`knowhow:dailyReward:${userId}`) || 'null') || { lastClaim: '' };
+      const today = new Date().toISOString().slice(0, 10);
+      return raw.lastClaim !== today;
+    } catch { return true; }
+  };
+  const [available, setAvailable] = useState(compute);
+  useEffect(() => {
+    const handler = () => setAvailable(compute());
+    handler();
+    window.addEventListener('daily-reward-updated', handler);
+    window.addEventListener('focus', handler);
+    const interval = setInterval(handler, 60000);
+    return () => {
+      window.removeEventListener('daily-reward-updated', handler);
+      window.removeEventListener('focus', handler);
+      clearInterval(interval);
+    };
+  }, [userId]);
+  return available;
+}
+
 function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery }) {
   const items = [
     ['dashboard', 'Home'],
