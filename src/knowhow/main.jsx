@@ -3324,6 +3324,7 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
       status: 'Rescheduled',
     } : s));
     setRescheduleTarget(null);
+    notify(user.id, { category: 'reschedule', title: 'Session rescheduled', body: `${rescheduleTarget.topic || 'Session'} moved to ${date} ${time} (${minutes} min).` });
     try {
       await apiRequest(`/sessions/${id}/reschedule`, { method: 'PATCH', body: JSON.stringify({ date, time, durationMinutes: minutes }) });
       setSessionNotice('Session rescheduled. Learners will see the updated time.');
