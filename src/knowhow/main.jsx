@@ -3134,6 +3134,22 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
             ))}
           </div>
         </div>
+        <div className="card">
+          <h3>Money Exchange</h3>
+          <p className="muted-text">Bulk credit packs at a discounted rate.</p>
+          <div className="list">
+            {[
+              { id: 'exchange-100', title: '100 Credits', credits: 100, price: '$3' },
+              { id: 'exchange-200', title: '200 Credits', credits: 200, price: '$6' },
+              { id: 'exchange-300', title: '300 Credits', credits: 300, price: '$10' },
+            ].map((product) => (
+              <div className="skill-row" key={product.id}>
+                <div><strong>{product.title}</strong><span>{product.price} • {product.credits} credits</span></div>
+                <button className="primary" type="button" onClick={() => openPayment(product)}>Exchange</button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="card">
 
