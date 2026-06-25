@@ -3568,6 +3568,9 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
 
     setActiveMeeting(null);
     setSessionEndAd(pickRandomAd());
+    if (!isTeacher && session.teacherId && session.teacherId !== user.id) {
+      setPendingReview({ sessionId: session.id, teacherId: session.teacherId, teacherName: session.teacher || 'Teacher', topic: session.topic });
+    }
 
     const totalCredits = settlements.reduce((s, x) => s + x.credits, 0);
     setSessionNotice(settlements.length
