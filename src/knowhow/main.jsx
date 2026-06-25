@@ -3619,16 +3619,26 @@ function LiveAttendanceSummary({ activeMeeting }) {
   }, [activeMeeting]);
   const now = new Date(tick).toISOString();
   const liveFields = sessionAttendanceFields(activeMeeting?.attendance || [], now);
-  const liveCredits = minutesToCredits(liveFields.verifiedDurationMinutes || liveFields.actualDurationMinutes || 0);
+  const verifiedMin = Number(liveFields.verifiedDurationMinutes || 0);
+  const accruing = verifiedMin > 0 && (liveFields.mentorJoinedAt && liveFields.learnerJoinedAt);
+  const totalSec = Math.max(0, Math.floor(verifiedMin * 60));
+  const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+  const ss = String(totalSec % 60).padStart(2, '0');
+  const liveCredits = minutesToCredits(verifiedMin || liveFields.actualDurationMinutes || 0);
   return (
     <div className="summary-box live-attendance-box">
-      <strong>Live attendance:</strong>
-      <span> Mentor joined: {liveFields.mentorJoinedAt || '—'} • Learner joined: {liveFields.learnerJoinedAt || '—'}</span>
-      <span> Actual: {liveFields.actualDurationMinutes} min • Verified overlap: {liveFields.verifiedDurationMinutes} min</span>
-      <span> Credit preview: {formatCredits(liveCredits)} credit(s) using verified time</span>
+      <div className="live-counter" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, background: accruing ? '#ecfdf5' : '#f3f4f6', border: `1px solid ${accruing ? '#10b981' : '#d1d5db'}`, marginBottom: 8 }}>
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: accruing ? '#10b981' : '#9ca3af', boxShadow: accruing ? '0 0 0 4px rgba(16,185,129,0.2)' : 'none', animation: accruing ? 'pulse 1.5s infinite' : 'none' }} />
+        <strong style={{ fontSize: 13, color: '#374151' }}>Verified minutes</strong>
+        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 22, color: accruing ? '#065f46' : '#6b7280' }}>{mm}:{ss}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 13, color: '#374151' }}>≈ <strong>{formatCredits(liveCredits)}</strong> credit(s)</span>
+        <span style={{ fontSize: 11, color: accruing ? '#059669' : '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{accruing ? 'Accruing' : 'Paused'}</span>
+      </div>
+      <span style={{ fontSize: 12, color: '#6b7280' }}>Mentor joined: {liveFields.mentorJoinedAt || '—'} • Learner joined: {liveFields.learnerJoinedAt || '—'} • Actual: {liveFields.actualDurationMinutes} min</span>
     </div>
   );
 }
+
 
 function MessagesPage({ messages, setMessages, sessions, setSessions, user, people, setPage }) {
   const contactProfiles = useMemo(() => {
