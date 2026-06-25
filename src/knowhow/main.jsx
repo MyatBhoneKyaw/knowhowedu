@@ -4079,8 +4079,9 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
   function sendMessage(customBody = '', attachment = null) {
     const body = (customBody || text || (attachment ? attachmentLabel(attachment) : '')).trim();
     if (!body && !attachment) return;
-    setMessages((current) => [...current, {
-      id: crypto.randomUUID(),
+    const tempId = crypto.randomUUID();
+    const optimistic = {
+      id: tempId,
       name: activeContact || 'Community Inbox',
       username: activeProfile?.username || normalizeText(activeContact).replace(/\s+/g, ''),
       type: composerMode === 'schedule' ? 'Schedule' : activeContact === 'Community Inbox' ? 'Community message' : 'Private message',
@@ -4090,10 +4091,28 @@ function MessagesPage({ messages, setMessages, sessions, setSessions, user, peop
       direction: 'outgoing',
       unread: false,
       delivered: true,
-    }]);
+    };
+    setMessages((current) => [...current, optimistic]);
     setText('');
     setComposerMode('message');
+    // Persist to cloud so the recipient sees it
+    const recipientId = activeProfile?.id;
+    if (recipientId && activeContact !== 'Community Inbox' && activeContact !== user.fullName) {
+      apiRequest('/messages', {
+        method: 'POST',
+        body: {
+          recipientId,
+          body: body || attachmentLabel(attachment),
+          messageType: composerMode === 'schedule' ? 'schedule' : 'private',
+          attachments: attachment || null,
+        },
+      }).then((saved) => {
+        if (!saved?.id) return;
+        setMessages((current) => current.map((m) => m.id === tempId ? { ...m, id: saved.id, cloudId: saved.id, createdAt: saved.createdAt || new Date().toISOString() } : m));
+      }).catch(() => { /* keep optimistic */ });
+    }
   }
+
 
   async function sendMediaFiles(event) {
     const files = Array.from(event.target.files || []);
