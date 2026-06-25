@@ -32,7 +32,20 @@ function loadCache(lang: string) {
     }
   } catch (_) {}
 }
+let saveTimer: number | null = null;
 function saveCache(lang: string) {
+  if (saveTimer) window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    saveTimer = null;
+    try {
+      const obj: Record<string, string> = {};
+      cache.forEach((v, k) => { obj[k] = v; });
+      localStorage.setItem(CACHE_KEY(lang), JSON.stringify(obj));
+    } catch (_) {}
+  }, 400);
+}
+function flushCache(lang: string) {
+  if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
   try {
     const obj: Record<string, string> = {};
     cache.forEach((v, k) => { obj[k] = v; });
