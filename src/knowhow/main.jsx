@@ -1630,6 +1630,29 @@ function App() {
     return () => { cancelled = true; };
   }, [loggedIn]);
 
+  // Load active sessions from the cloud so every signed-in user sees teacher-created sessions.
+  useEffect(() => {
+    if (!loggedIn) return undefined;
+    let cancelled = false;
+    async function loadCloudSessions() {
+      try {
+        const cloud = await apiRequest('/sessions/feed');
+        if (cancelled || !Array.isArray(cloud)) return;
+        setSessions((current) => {
+          const byId = new Map();
+          (current || []).forEach((s) => { if (s && s.id) byId.set(s.id, s); });
+          cloud.forEach((s) => { if (s && s.id) byId.set(s.id, { ...(byId.get(s.id) || {}), ...s }); });
+          return Array.from(byId.values());
+        });
+      } catch (e) {
+        // silent — local seed continues to work
+      }
+    }
+    loadCloudSessions();
+    const interval = window.setInterval(loadCloudSessions, 15000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [loggedIn]);
+
   const allPeople = useMemo(() => {
     const map = new Map();
     [...PEOPLE, ...cloudPeople].forEach((p) => {
