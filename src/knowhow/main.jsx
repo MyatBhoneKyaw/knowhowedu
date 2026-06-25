@@ -3534,6 +3534,11 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
           title: `Teaching ${session.topic} • ${s.minutes} min verified • ${formatCredits(s.credits)} credits from ${s.learner}`,
           amount: s.credits, date: nowIso.slice(0, 10),
         }));
+        settlements.forEach((s) => notify(user.id, {
+          category: 'credit-gain',
+          title: `+${formatCredits(s.credits)} credits earned`,
+          body: `${s.learner} attended ${s.minutes} verified min of ${session.topic}.`,
+        }));
         nextUser = { ...user, wallet: nextWallet };
       } else {
         const mine = settlements.find((s) => s.learner === user.fullName);
@@ -3547,6 +3552,11 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
             id: crypto.randomUUID(), type: 'Spent',
             title: `Learning ${session.topic} • ${mine.minutes} min verified • ${formatCredits(mine.credits)} credits`,
             amount: -mine.credits, date: nowIso.slice(0, 10),
+          });
+          notify(user.id, {
+            category: 'credit-loss',
+            title: `-${formatCredits(mine.credits)} credits spent`,
+            body: `${mine.minutes} verified min of ${session.topic}.`,
           });
           nextUser = { ...user, wallet: nextWallet };
         }
