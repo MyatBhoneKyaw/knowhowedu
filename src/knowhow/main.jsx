@@ -4406,6 +4406,29 @@ function AdminPage({ sessions, people, transactions, teacherApplications, setTea
   const [selectedApplicationId, setSelectedApplicationId] = useState(normalizedApplications[0]?.id);
   const [adminNote, setAdminNote] = useState('');
   const [adminNotice, setAdminNotice] = useState('');
+  const [reports, setReports] = useState([]);
+  const [reportsNotice, setReportsNotice] = useState('');
+
+  async function loadReports() {
+    try {
+      const data = await adminApiRequest('/admin/reports');
+      setReports(Array.isArray(data) ? data : []);
+      setReportsNotice('');
+    } catch (error) {
+      setReportsNotice(`Could not load reports: ${error.message}`);
+    }
+  }
+
+  useEffect(() => { loadReports(); }, []);
+
+  async function updateReportStatus(id, status) {
+    try {
+      await adminApiRequest(`/admin/reports/${id}`, { method: 'PATCH', body: JSON.stringify({ status, adminNote: '' }) });
+      await loadReports();
+    } catch (error) {
+      setReportsNotice(`Failed to update report: ${error.message}`);
+    }
+  }
   const selectedUser = adminUsers.find((item) => item.id === selectedUserId) || adminUsers[0];
   const selectedApplication = normalizedApplications.find((item) => item.id === selectedApplicationId) || normalizedApplications[0];
 
