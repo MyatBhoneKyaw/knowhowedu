@@ -10,33 +10,143 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiQualificationsTeacherApplicationsRouteImport } from './routes/api/qualifications.teacher-applications'
+import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth.register'
+import { Route as ApiAuthMeRouteImport } from './routes/api/auth.me'
+import { Route as ApiAuthLoginRouteImport } from './routes/api/auth.login'
+import { Route as ApiAdminTeacherApplicationsRouteImport } from './routes/api/admin.teacher-applications'
+import { Route as ApiUsersMeProfileRouteImport } from './routes/api/users.me.profile'
+import { Route as ApiAdminTeacherApplicationsIdRouteImport } from './routes/api/admin.teacher-applications.$id'
+import { Route as ApiAdminAuthLoginRouteImport } from './routes/api/admin.auth.login'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiQualificationsTeacherApplicationsRoute =
+  ApiQualificationsTeacherApplicationsRouteImport.update({
+    id: '/api/qualifications/teacher-applications',
+    path: '/api/qualifications/teacher-applications',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
+  id: '/api/auth/register',
+  path: '/api/auth/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthMeRoute = ApiAuthMeRouteImport.update({
+  id: '/api/auth/me',
+  path: '/api/auth/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
+  id: '/api/auth/login',
+  path: '/api/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminTeacherApplicationsRoute =
+  ApiAdminTeacherApplicationsRouteImport.update({
+    id: '/api/admin/teacher-applications',
+    path: '/api/admin/teacher-applications',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiUsersMeProfileRoute = ApiUsersMeProfileRouteImport.update({
+  id: '/api/users/me/profile',
+  path: '/api/users/me/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminTeacherApplicationsIdRoute =
+  ApiAdminTeacherApplicationsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => ApiAdminTeacherApplicationsRoute,
+  } as any)
+const ApiAdminAuthLoginRoute = ApiAdminAuthLoginRouteImport.update({
+  id: '/api/admin/auth/login',
+  path: '/api/admin/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/me': typeof ApiAuthMeRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
+  '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
+  '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
+  '/api/users/me/profile': typeof ApiUsersMeProfileRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/me': typeof ApiAuthMeRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
+  '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
+  '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
+  '/api/users/me/profile': typeof ApiUsersMeProfileRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/admin/teacher-applications': typeof ApiAdminTeacherApplicationsRouteWithChildren
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/me': typeof ApiAuthMeRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/qualifications/teacher-applications': typeof ApiQualificationsTeacherApplicationsRoute
+  '/api/admin/auth/login': typeof ApiAdminAuthLoginRoute
+  '/api/admin/teacher-applications/$id': typeof ApiAdminTeacherApplicationsIdRoute
+  '/api/users/me/profile': typeof ApiUsersMeProfileRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/api/admin/teacher-applications'
+    | '/api/auth/login'
+    | '/api/auth/me'
+    | '/api/auth/register'
+    | '/api/qualifications/teacher-applications'
+    | '/api/admin/auth/login'
+    | '/api/admin/teacher-applications/$id'
+    | '/api/users/me/profile'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/api/admin/teacher-applications'
+    | '/api/auth/login'
+    | '/api/auth/me'
+    | '/api/auth/register'
+    | '/api/qualifications/teacher-applications'
+    | '/api/admin/auth/login'
+    | '/api/admin/teacher-applications/$id'
+    | '/api/users/me/profile'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/admin/teacher-applications'
+    | '/api/auth/login'
+    | '/api/auth/me'
+    | '/api/auth/register'
+    | '/api/qualifications/teacher-applications'
+    | '/api/admin/auth/login'
+    | '/api/admin/teacher-applications/$id'
+    | '/api/users/me/profile'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiAdminTeacherApplicationsRoute: typeof ApiAdminTeacherApplicationsRouteWithChildren
+  ApiAuthLoginRoute: typeof ApiAuthLoginRoute
+  ApiAuthMeRoute: typeof ApiAuthMeRoute
+  ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
+  ApiQualificationsTeacherApplicationsRoute: typeof ApiQualificationsTeacherApplicationsRoute
+  ApiAdminAuthLoginRoute: typeof ApiAdminAuthLoginRoute
+  ApiUsersMeProfileRoute: typeof ApiUsersMeProfileRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,22 +158,91 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/qualifications/teacher-applications': {
+      id: '/api/qualifications/teacher-applications'
+      path: '/api/qualifications/teacher-applications'
+      fullPath: '/api/qualifications/teacher-applications'
+      preLoaderRoute: typeof ApiQualificationsTeacherApplicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/register': {
+      id: '/api/auth/register'
+      path: '/api/auth/register'
+      fullPath: '/api/auth/register'
+      preLoaderRoute: typeof ApiAuthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/me': {
+      id: '/api/auth/me'
+      path: '/api/auth/me'
+      fullPath: '/api/auth/me'
+      preLoaderRoute: typeof ApiAuthMeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/login': {
+      id: '/api/auth/login'
+      path: '/api/auth/login'
+      fullPath: '/api/auth/login'
+      preLoaderRoute: typeof ApiAuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/teacher-applications': {
+      id: '/api/admin/teacher-applications'
+      path: '/api/admin/teacher-applications'
+      fullPath: '/api/admin/teacher-applications'
+      preLoaderRoute: typeof ApiAdminTeacherApplicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/users/me/profile': {
+      id: '/api/users/me/profile'
+      path: '/api/users/me/profile'
+      fullPath: '/api/users/me/profile'
+      preLoaderRoute: typeof ApiUsersMeProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/teacher-applications/$id': {
+      id: '/api/admin/teacher-applications/$id'
+      path: '/$id'
+      fullPath: '/api/admin/teacher-applications/$id'
+      preLoaderRoute: typeof ApiAdminTeacherApplicationsIdRouteImport
+      parentRoute: typeof ApiAdminTeacherApplicationsRoute
+    }
+    '/api/admin/auth/login': {
+      id: '/api/admin/auth/login'
+      path: '/api/admin/auth/login'
+      fullPath: '/api/admin/auth/login'
+      preLoaderRoute: typeof ApiAdminAuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface ApiAdminTeacherApplicationsRouteChildren {
+  ApiAdminTeacherApplicationsIdRoute: typeof ApiAdminTeacherApplicationsIdRoute
+}
+
+const ApiAdminTeacherApplicationsRouteChildren: ApiAdminTeacherApplicationsRouteChildren =
+  {
+    ApiAdminTeacherApplicationsIdRoute: ApiAdminTeacherApplicationsIdRoute,
+  }
+
+const ApiAdminTeacherApplicationsRouteWithChildren =
+  ApiAdminTeacherApplicationsRoute._addFileChildren(
+    ApiAdminTeacherApplicationsRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiAdminTeacherApplicationsRoute:
+    ApiAdminTeacherApplicationsRouteWithChildren,
+  ApiAuthLoginRoute: ApiAuthLoginRoute,
+  ApiAuthMeRoute: ApiAuthMeRoute,
+  ApiAuthRegisterRoute: ApiAuthRegisterRoute,
+  ApiQualificationsTeacherApplicationsRoute:
+    ApiQualificationsTeacherApplicationsRoute,
+  ApiAdminAuthLoginRoute: ApiAdminAuthLoginRoute,
+  ApiUsersMeProfileRoute: ApiUsersMeProfileRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
