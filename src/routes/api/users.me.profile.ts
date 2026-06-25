@@ -10,7 +10,12 @@ export const Route = createFileRoute("/api/users/me/profile")({
         const { user } = await requireUser(request);
         const body = await request.json().catch(() => ({}));
         const admin = adminClient();
-        const update: Record<string, unknown> = {};
+        const update: {
+          full_name?: string;
+          username?: string;
+          email?: string;
+          profile?: Record<string, unknown>;
+        } = {};
         if (body.fullName) update.full_name = body.fullName;
         if (body.username) update.username = body.username;
         if (body.email) update.email = body.email;
