@@ -651,6 +651,23 @@ async function adminApiRequest(path, options = {}) {
     const { data, error } = await supabase.from('credit_transactions').select('*').order('created_at', { ascending: false }).limit(200);
     return camel(ok(data, error));
   }
+  if (path === '/admin/reports' && method === 'GET') {
+    const { data, error } = await supabase.from('user_reports').select('*').order('created_at', { ascending: false }).limit(200);
+    return camel(ok(data, error));
+  }
+  if ((r = m(/^\/admin\/reports\/([^/]+)$/)) && method === 'PATCH') {
+    const { data, error } = await supabase
+      .from('user_reports')
+      .update({
+        status: body?.status,
+        admin_note: body?.adminNote,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', r[1])
+      .select('*')
+      .maybeSingle();
+    return camel(ok(data, error));
+  }
 
   throw new Error(`Unsupported admin API route: ${method} ${path}`);
 }
