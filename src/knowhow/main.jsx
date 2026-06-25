@@ -3406,6 +3406,8 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
     if (localTxs.length) setTransactions([...localTxs, ...transactions], nextUser);
 
     setActiveMeeting(null);
+    setSessionEndAd(pickRandomAd());
+
     const totalCredits = settlements.reduce((s, x) => s + x.credits, 0);
     setSessionNotice(settlements.length
       ? `Left meeting. Auto-settled ${formatCredits(totalCredits)} credit(s) across ${settlements.length} learner(s) using verified overlap minutes.`
