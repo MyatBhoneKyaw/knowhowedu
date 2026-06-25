@@ -544,14 +544,37 @@ async function listCommunityPosts(community) {
   let q = supabase.from('community_posts').select('*, community_comments(*)').order('created_at', { ascending: false });
   if (community) q = q.eq('community', community);
   const { data, error } = await q;
-  return camel(ok(data, error));
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  const authorIds = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
+  let authorsMap = {};
+  if (authorIds.length) {
+    const { data: profs } = await supabase.from('profiles').select('id, username, full_name').in('id', authorIds);
+    (profs || []).forEach((p) => { authorsMap[p.id] = p.full_name || p.username || 'Member'; });
+  }
+  return rows.map((r) => ({
+    id: r.id,
+    community: r.community,
+    title: r.title,
+    body: r.body,
+    author: authorsMap[r.author_id] || 'Member',
+    authorId: r.author_id,
+    votes: r.votes || 0,
+    likes: 0,
+    dislikes: 0,
+    comments: (r.community_comments || []).map((c) => ({ id: c.id, body: c.body, author: authorsMap[c.user_id] || 'Member', createdAt: c.created_at })),
+    tags: [r.community].filter(Boolean),
+    createdAt: r.created_at,
+  }));
 }
 async function createCommunityPost(body) {
   const uid = await requireUid();
-  const row = snake(body); row.author_id = uid;
+  const row = { community: body.community, title: body.title, body: body.body, author_id: uid };
   const { data, error } = await supabase.from('community_posts').insert(row).select('*').maybeSingle();
-  return camel(ok(data, error));
+  if (error) throw new Error(error.message);
+  return { id: data.id, community: data.community, title: data.title, body: data.body, votes: 0, likes: 0, dislikes: 0, comments: [], tags: [data.community], createdAt: data.created_at };
 }
+
 async function voteCommunity(postId) {
   const uid = await requireUid();
   await supabase.from('community_reactions').upsert({ post_id: postId, user_id: uid, value: 1 }, { onConflict: 'post_id,user_id' });
@@ -1759,6 +1782,27 @@ function App() {
   const [transactions, setTransactions] = useState(() => loadState('knowhow-transactions', INITIAL_TRANSACTIONS));
   const [messages, setMessages] = useState(() => loadState('knowhow-messages', INITIAL_MESSAGES));
   const [communityPosts, setCommunityPosts] = useState(() => loadState('knowhow-community-posts', INITIAL_COMMUNITY_POSTS));
+
+  useEffect(() => {
+    let cancelled = false;
+    async function syncPosts() {
+      try {
+        const cloud = await apiRequest('/community');
+        if (cancelled || !Array.isArray(cloud)) return;
+        setCommunityPosts((prev) => {
+          const cloudIds = new Set(cloud.map((p) => p.id));
+          const localOnly = (prev || []).filter((p) => !cloudIds.has(p.id) && (INITIAL_COMMUNITY_POSTS || []).some((i) => i.id === p.id));
+          const merged = [...cloud, ...localOnly];
+          localStorage.setItem('knowhow-community-posts', JSON.stringify(merged));
+          return merged;
+        });
+      } catch (err) { /* ignore */ }
+    }
+    syncPosts();
+    const id = setInterval(syncPosts, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
   const [teacherApplications, setTeacherApplications] = useState(() => loadTeacherApplications());
   const [adminAuthed, setAdminAuthed] = useState(() => Boolean(localStorage.getItem('knowhow-admin-token')));
   const [adminMode, setAdminMode] = useState(() => isAdminRoute() || Boolean(localStorage.getItem('knowhow-admin-token')));
@@ -5095,7 +5139,7 @@ function CommunityPage({ user, posts = [], setPosts = () => {} }) {
     localStorage.setItem(reactionStorageKey, JSON.stringify(nextMap));
   }
 
-  function createPost(event) {
+  async function createPost(event) {
     event.preventDefault();
     setCommunityNotice('');
     if (!postForm.title.trim() || !postForm.body.trim()) {
@@ -5104,24 +5148,36 @@ function CommunityPage({ user, posts = [], setPosts = () => {} }) {
     }
     const selectedBoard = boards.find((board) => board.title === postForm.community || board.category === postForm.community || board.name === normalizeText(postForm.community));
     const communityName = postForm.community || selectedBoard?.title || 'General';
-    const newPost = {
-      id: crypto.randomUUID(),
+    const draft = {
       community: communityName,
       title: postForm.title.trim(),
       body: postForm.body.trim(),
-      author: currentAuthor,
-      votes: 0,
-      likes: 0,
-      dislikes: 0,
-      comments: [],
-      tags: [communityName, selectedBoard?.category || communityName].filter(Boolean),
-      createdAt: new Date().toISOString(),
     };
-    setPosts([newPost, ...posts]);
-    setPostForm({ community: communityName, title: '', body: '' });
-    setActiveBoard('all');
-    setShowCreatePost(false);
+    try {
+      const saved = await apiRequest('/community', { method: 'POST', body: draft });
+      const newPost = {
+        id: saved?.id || crypto.randomUUID(),
+        community: saved?.community || communityName,
+        title: saved?.title || draft.title,
+        body: saved?.body || draft.body,
+        author: currentAuthor,
+        authorId: user?.id,
+        votes: 0,
+        likes: 0,
+        dislikes: 0,
+        comments: [],
+        tags: [communityName, selectedBoard?.category || communityName].filter(Boolean),
+        createdAt: saved?.createdAt || new Date().toISOString(),
+      };
+      setPosts([newPost, ...posts]);
+      setPostForm({ community: communityName, title: '', body: '' });
+      setActiveBoard('all');
+      setShowCreatePost(false);
+    } catch (err) {
+      setCommunityNotice(err?.message || 'Failed to publish post. Please sign in and try again.');
+    }
   }
+
 
   function votePost(postId, delta) {
     const current = Number(reactionMap[postId] || 0);
