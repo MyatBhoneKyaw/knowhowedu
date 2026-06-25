@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/users/me/profile")({
         if (body.profile) update.profile = body.profile;
         const { data, error } = await admin
           .from("profiles")
-          .update(update)
+          .update(update as never)
           .eq("id", user.id)
           .select("*")
           .single();
