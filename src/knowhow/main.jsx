@@ -1670,8 +1670,11 @@ function App() {
         const cloud = await apiRequest('/sessions/feed');
         if (cancelled || !Array.isArray(cloud)) return;
         setSessions((current) => {
+          const cloudIds = new Set(cloud.map((s) => s && s.id).filter(Boolean));
+          // Drop previously cloud-backed sessions that no longer exist (e.g. teacher cancelled/deleted them).
+          const kept = (current || []).filter((s) => !s?.fromCloud || cloudIds.has(s.id));
           const byId = new Map();
-          (current || []).forEach((s) => { if (s && s.id) byId.set(s.id, s); });
+          kept.forEach((s) => { if (s && s.id) byId.set(s.id, s); });
           cloud.forEach((s) => { if (s && s.id) byId.set(s.id, { ...(byId.get(s.id) || {}), ...s }); });
           return Array.from(byId.values());
         });
