@@ -5093,11 +5093,29 @@ function VideoPanelPage({ user, setUser }) {
                 <label>Category<select value={uploadForm.category} onChange={(e) => setUploadForm({ ...uploadForm, category: e.target.value })}>{['Design','Language','Programming','Creative','Business','Other'].map(c => <option key={c}>{c}</option>)}</select></label>
                 <label>Level<select value={uploadForm.level} onChange={(e) => setUploadForm({ ...uploadForm, level: e.target.value })}>{['Beginner','Intermediate','Advanced','N5','N4'].map(c => <option key={c}>{c}</option>)}</select></label>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <label>Duration<input value={uploadForm.durationLabel} onChange={(e) => setUploadForm({ ...uploadForm, durationLabel: e.target.value })} placeholder="e.g. 18 min" /></label>
-                <label>Price (credits)<input type="number" min="0" step="0.25" value={uploadForm.priceCredits} onChange={(e) => setUploadForm({ ...uploadForm, priceCredits: e.target.value })} /></label>
-              </div>
-              <label>Video file<input type="file" accept="video/*" onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files?.[0] || null })} /></label>
+              <label>Video file<input type="file" accept="video/*" onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                if (!file) { setUploadForm((prev) => ({ ...prev, file: null })); return; }
+                const url = URL.createObjectURL(file);
+                const probe = document.createElement('video');
+                probe.preload = 'metadata';
+                probe.src = url;
+                probe.onloadedmetadata = () => {
+                  const seconds = Math.max(1, Math.round(probe.duration || 0));
+                  const minutes = Math.max(1, Math.ceil(seconds / 60));
+                  const credits = Math.max(1, Math.ceil(minutes / 15));
+                  const label = minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes} min`;
+                  setUploadForm((prev) => ({ ...prev, file, durationLabel: label, priceCredits: credits }));
+                  URL.revokeObjectURL(url);
+                };
+                probe.onerror = () => {
+                  setUploadForm((prev) => ({ ...prev, file, durationLabel: '—', priceCredits: 1 }));
+                  URL.revokeObjectURL(url);
+                };
+              }} /></label>
+              {uploadForm.file && (
+                <p className="muted-text" style={{ margin: 0 }}>Detected duration: <strong>{uploadForm.durationLabel}</strong> • Auto price: <strong>{uploadForm.priceCredits} credit{uploadForm.priceCredits === 1 ? '' : 's'}</strong> (1 credit per 15 min)</p>
+              )}
               
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
                 <button type="button" className="ghost" onClick={() => setShowUpload(false)}>Cancel</button>
