@@ -1241,9 +1241,9 @@ const LECTURE_VIDEOS = [
 const LOAN_POLICY = {
   min: 0.5,
   maxOutstanding: 5,
-  maxSingleLoan: 3,
+  maxSingleLoan: 5,
   minDays: 7,
-  maxDays: 30,
+  maxDays: 7,
 };
 
 const TEACHING_ALLOWED_ROLES = ['assistant_teacher', 'teacher', 'community_mentor', 'administrator'];
