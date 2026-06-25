@@ -120,10 +120,29 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (document.getElementById("google-translate-script")) return;
+    (window as any).googleTranslateElementInit = () => {
+      // @ts-ignore
+      new window.google.translate.TranslateElement(
+        { pageLanguage: "en", includedLanguages: "en,my,zh-CN", autoDisplay: false },
+        "google_translate_element"
+      );
+    };
+    const s = document.createElement("script");
+    s.id = "google-translate-script";
+    s.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+    s.async = true;
+    document.body.appendChild(s);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
+      <div id="google_translate_element" style={{ position: "absolute", left: "-9999px", top: 0, height: 0, overflow: "hidden" }} aria-hidden="true" />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
     </QueryClientProvider>
   );
 }
+
