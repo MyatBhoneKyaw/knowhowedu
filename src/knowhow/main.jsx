@@ -5205,24 +5205,135 @@ function VideoPanelPage({ user, setUser }) {
   const [videoNotice, setVideoNotice] = useState('');
   const [view, setView] = useState('browse');
   const [uploadedVideos, setUploadedVideos] = useState([]);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoSaving, setVideoSaving] = useState('');
+  const [uploadSaving, setUploadSaving] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [uploadForm, setUploadForm] = useState({ title: '', description: '', category: 'Design', level: 'Beginner', durationLabel: '15 min', priceCredits: 0, videoUrl: '', file: null });
   const isTeacher = canUserTeach(user);
-  const ownedKey = `knowhow:ownedVideos:${user.id}`;
-  const purchasedVideos = user.purchasedVideos || [];
-  useEffect(() => {
+  const ownedKey = `knowhow:ownedVideos:${user.id || 'guest'}`;
+  const [ownedVideoIds, setOwnedVideoIds] = useState(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem(ownedKey) || '[]');
-      if (Array.isArray(stored) && stored.length && stored.join(',') !== purchasedVideos.join(',')) {
-        const merged = Array.from(new Set([...(user.purchasedVideos || []), ...stored]));
-        setUser({ ...user, purchasedVideos: merged });
+      const stored = JSON.parse(localStorage.getItem(`knowhow:ownedVideos:${user.id || 'guest'}`) || '[]');
+      return Array.from(new Set([...(Array.isArray(user.purchasedVideos) ? user.purchasedVideos : []), ...(Array.isArray(stored) ? stored : [])]));
+    } catch {
+      return Array.isArray(user.purchasedVideos) ? user.purchasedVideos : [];
+    }
+  });
+  const purchasedVideos = ownedVideoIds;
+
+  async function signedVideoUrl(storagePath) {
+    if (!storagePath) return '';
+    const { data, error } = await supabase.storage.from('lecture-videos').createSignedUrl(storagePath, 60 * 60);
+    if (error) throw error;
+    return data?.signedUrl || '';
+  }
+
+  function lectureRowToCard(row, videoUrl = '') {
+    return {
+      id: row.id,
+      ownerId: row.owner_id,
+      title: row.title,
+      description: row.description || 'Teacher-uploaded lecture.',
+      category: row.category || 'Other',
+      level: row.level || 'Beginner',
+      duration: row.duration_label || '—',
+      priceCredits: Number(row.price_credits || 0),
+      teacher: row.teacher_name || 'Teacher',
+      videoUrl: videoUrl || row.external_url || '',
+      poster: row.poster_url || '',
+      badge: row.badge || (Number(row.price_credits || 0) > 0 ? 'Premium' : 'Free'),
+      storagePath: row.storage_path || '',
+      isUploaded: true,
+    };
+  }
+
+  function mergeOwnedIds(...groups) {
+    return Array.from(new Set(groups.flat().filter(Boolean).map(String)));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    const localOwned = (() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(ownedKey) || '[]');
+        return Array.isArray(stored) ? stored : [];
+      } catch {
+        return [];
       }
-    } catch {}
+    })();
+    const sessionOwned = Array.isArray(user.purchasedVideos) ? user.purchasedVideos : [];
+    const startingOwned = mergeOwnedIds(sessionOwned, localOwned);
+    setOwnedVideoIds(startingOwned);
+
+    async function loadOwnerships() {
+      if (!user.id || user.id === 'guest') return;
+      try {
+        const { data, error } = await supabase
+          .from('video_ownerships')
+          .select('video_id')
+          .eq('user_id', user.id);
+        if (error) throw error;
+        const cloudOwned = (data || []).map((row) => row.video_id);
+        const merged = mergeOwnedIds(startingOwned, cloudOwned);
+        const missingCloudRows = merged
+          .filter((videoId) => !cloudOwned.includes(videoId))
+          .map((videoId) => ({ user_id: user.id, video_id: videoId, source: 'claimed' }));
+        if (missingCloudRows.length) {
+          await supabase.from('video_ownerships').upsert(missingCloudRows, { onConflict: 'user_id,video_id' });
+        }
+        if (cancelled) return;
+        setOwnedVideoIds(merged);
+        setUser((current) => ({ ...current, purchasedVideos: merged }));
+        localStorage.setItem(ownedKey, JSON.stringify(merged));
+      } catch (error) {
+        console.warn('Could not load video ownerships', error);
+      }
+    }
+
+    loadOwnerships();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
+
   useEffect(() => {
     try { localStorage.setItem(ownedKey, JSON.stringify(purchasedVideos)); } catch {}
+    if (Array.isArray(user.purchasedVideos) && user.purchasedVideos.join(',') === purchasedVideos.join(',')) return;
+    setUser((current) => ({ ...current, purchasedVideos }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownedKey, purchasedVideos.join(',')]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUploadedVideos() {
+      if (!user.id) return;
+      setVideoLoading(true);
+    try {
+        const { data, error } = await supabase
+          .from('lecture_videos')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        const mapped = await Promise.all((data || []).map(async (row) => {
+          let videoUrl = row.external_url || '';
+          if (row.storage_path) {
+            try { videoUrl = await signedVideoUrl(row.storage_path); }
+            catch (signedError) { console.warn('Could not sign video URL', signedError); }
+          }
+          return lectureRowToCard(row, videoUrl);
+        }));
+        if (!cancelled) setUploadedVideos(mapped);
+      } catch (error) {
+        console.warn('Could not load uploaded videos', error);
+        if (!cancelled) setVideoNotice(`Could not load uploaded videos: ${error.message || error}`);
+      } finally {
+        if (!cancelled) setVideoLoading(false);
+      }
+    }
+    loadUploadedVideos();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
   const allVideos = [...uploadedVideos, ...LECTURE_VIDEOS];
   const categories = ['All', ...Array.from(new Set(allVideos.map((video) => video.category)))];
   const normalizedSearch = normalizeText(videoSearch);
@@ -5242,56 +5353,135 @@ function VideoPanelPage({ user, setUser }) {
     setVideoAd(pickRandomAd());
   }
 
-  function claimOrBuy(video) {
+  async function saveVideoOwnership(videoId, source = 'claimed') {
+    if (!user.id) throw new Error('Please sign in before saving videos.');
+    const nextOwned = mergeOwnedIds(purchasedVideos, [videoId]);
+    setOwnedVideoIds(nextOwned);
+    setUser((current) => ({ ...current, purchasedVideos: mergeOwnedIds(current.purchasedVideos || [], [videoId]) }));
+    localStorage.setItem(ownedKey, JSON.stringify(nextOwned));
+    const { error } = await supabase
+      .from('video_ownerships')
+      .upsert({ user_id: user.id, video_id: String(videoId), source }, { onConflict: 'user_id,video_id' });
+    if (error) throw error;
+    return nextOwned;
+  }
+
+  async function claimOrBuy(video) {
     setVideoNotice('');
     if (isOwned(video)) {
       openVideoWithAd(video);
       return;
     }
-
-    const currentCredits = Number(user.wallet?.current || 0);
-    if (video.priceCredits > 0 && currentCredits < video.priceCredits) {
-      setVideoNotice(`You need ${formatCredits(video.priceCredits)} credits to unlock this lecture.`);
+    if (!user.id) {
+      setVideoNotice('Please sign in before claiming videos.');
       return;
     }
-    const nextCurrent = video.priceCredits > 0 ? Number((currentCredits - video.priceCredits).toFixed(4)) : currentCredits;
-    const nextUser = {
-      ...user,
-      purchasedVideos: [...purchasedVideos, video.id],
-      wallet: normalizeWallet({ ...user.wallet, current: nextCurrent, lectureAccess: Number(user.wallet?.lectureAccess || 0) + 1 }),
-    };
-    setUser(nextUser);
-    setVideoNotice(`${video.title} added to your Own Videos.`);
+
+    const currentCredits = Number(user.wallet?.current || 0);
+    const priceCredits = Number(video.priceCredits || 0);
+    if (priceCredits > 0 && currentCredits < priceCredits) {
+      setVideoNotice(`You need ${formatCredits(priceCredits)} credits to unlock this lecture.`);
+      return;
+    }
+    setVideoSaving(video.id);
+    try {
+      const nextCurrent = priceCredits > 0 ? Number((currentCredits - priceCredits).toFixed(2)) : currentCredits;
+      const nextSpent = priceCredits > 0 ? Number((Number(user.wallet?.spent || 0) + priceCredits).toFixed(2)) : Number(user.wallet?.spent || 0);
+      const nextLectureAccess = Number(user.wallet?.lectureAccess || 0) + 1;
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .update({
+          current_credits: nextCurrent,
+          spent_credits: nextSpent,
+          lecture_access: nextLectureAccess,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id);
+      if (walletError) throw walletError;
+      if (priceCredits > 0) {
+        await supabase.from('credit_transactions').insert({
+          user_id: user.id,
+          amount: -priceCredits,
+          type: 'spent',
+          description: `Video unlock: ${video.title}`,
+          balance_after: nextCurrent,
+        });
+      }
+      await saveVideoOwnership(video.id, priceCredits > 0 ? 'purchased' : 'claimed');
+      setUser((current) => ({
+        ...current,
+        purchasedVideos: mergeOwnedIds(current.purchasedVideos || [], [video.id]),
+        wallet: normalizeWallet({ ...current.wallet, current: nextCurrent, spent: nextSpent, lectureAccess: nextLectureAccess }),
+      }));
+      setVideoNotice(`${video.title} added to your Own Videos.`);
+    } catch (error) {
+      setVideoNotice(`Could not save video ownership: ${error.message || error}`);
+    } finally {
+      setVideoSaving('');
+    }
   }
 
-  function submitUpload(event) {
+  async function submitUpload(event) {
     event.preventDefault();
     if (!isTeacher) return;
+    if (!user.id) { setVideoNotice('Please sign in before uploading videos.'); return; }
     if (!uploadForm.title.trim()) { setVideoNotice('Please enter a title for your video.'); return; }
-    let videoUrl = uploadForm.videoUrl.trim();
-    let poster = '';
-    if (!videoUrl && uploadForm.file) {
-      videoUrl = URL.createObjectURL(uploadForm.file);
+    if (!uploadForm.file && !uploadForm.videoUrl.trim()) { setVideoNotice('Please upload a video file.'); return; }
+    setUploadSaving(true);
+    setVideoNotice('');
+    let storagePath = '';
+    try {
+      let videoUrl = uploadForm.videoUrl.trim();
+      if (uploadForm.file) {
+        const extension = (uploadForm.file.name.split('.').pop() || 'mp4').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'mp4';
+        const safeTitle = uploadForm.title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'lecture-video';
+        storagePath = `${user.id}/${Date.now()}-${safeTitle}.${extension}`;
+        const { error: uploadError } = await supabase.storage
+          .from('lecture-videos')
+          .upload(storagePath, uploadForm.file, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: uploadForm.file.type || 'video/mp4',
+          });
+        if (uploadError) throw uploadError;
+        videoUrl = await signedVideoUrl(storagePath);
+      }
+      if (!videoUrl) { setVideoNotice('Please upload a playable video file.'); return; }
+      const priceCredits = Number(uploadForm.priceCredits) || 0;
+      const { data: row, error: insertError } = await supabase
+        .from('lecture_videos')
+        .insert({
+          owner_id: user.id,
+          title: uploadForm.title.trim(),
+          description: uploadForm.description.trim() || 'Teacher-uploaded lecture.',
+          category: uploadForm.category,
+          level: uploadForm.level,
+          duration_label: uploadForm.durationLabel || '—',
+          price_credits: priceCredits,
+          teacher_name: user.fullName || 'Teacher',
+          storage_path: storagePath || null,
+          external_url: storagePath ? null : videoUrl,
+          poster_url: null,
+          badge: priceCredits > 0 ? 'Premium' : 'Free',
+        })
+        .select('*')
+        .maybeSingle();
+      if (insertError) throw insertError;
+      const newVideo = lectureRowToCard(row, videoUrl);
+      await saveVideoOwnership(newVideo.id, 'uploaded');
+      setUploadedVideos((prev) => [newVideo, ...prev.filter((item) => item.id !== newVideo.id)]);
+      setShowUpload(false);
+      setUploadForm({ title: '', description: '', category: 'Design', level: 'Beginner', durationLabel: '15 min', priceCredits: 0, videoUrl: '', file: null });
+      setVideoNotice(`"${newVideo.title}" uploaded successfully and saved to Own Videos.`);
+      setView('owned');
+    } catch (error) {
+      if (storagePath) {
+        supabase.storage.from('lecture-videos').remove([storagePath]).catch(() => {});
+      }
+      setVideoNotice(`Could not upload video: ${error.message || error}`);
+    } finally {
+      setUploadSaving(false);
     }
-    if (!videoUrl) { setVideoNotice('Please upload a file or paste a video URL.'); return; }
-    const newVideo = {
-      id: `uploaded-${Date.now()}`,
-      title: uploadForm.title.trim(),
-      description: uploadForm.description.trim() || 'Teacher-uploaded lecture.',
-      category: uploadForm.category,
-      level: uploadForm.level,
-      durationLabel: uploadForm.durationLabel || '—',
-      priceCredits: Number(uploadForm.priceCredits) || 0,
-      teacher: user.fullName,
-      videoUrl,
-      poster,
-    };
-    setUploadedVideos((prev) => [newVideo, ...prev]);
-    setUser({ ...user, purchasedVideos: [...purchasedVideos, newVideo.id] });
-    setShowUpload(false);
-    setUploadForm({ title: '', description: '', category: 'Design', level: 'Beginner', durationLabel: '15 min', priceCredits: 0, videoUrl: '', file: null });
-    setVideoNotice(`"${newVideo.title}" uploaded successfully.`);
-    setView('owned');
   }
 
   return (
