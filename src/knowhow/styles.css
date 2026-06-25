@@ -4119,3 +4119,90 @@ body {
   font-size: 18px; line-height: 1; padding: 0 4px;
 }
 .notification-dismiss:hover { color: #ef4444; }
+
+/* ============================================================
+   Mobile responsiveness fixes (≤ 720px) — does not affect desktop
+   ============================================================ */
+@media (max-width: 720px) {
+  /* --- App header: stack as brand, actions, nav (top to bottom) --- */
+  .sidebar.top-navigation,
+  .sidebar.top-navigation.collapsed {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+  }
+  .sidebar.top-navigation .brand.top-brand,
+  .sidebar.top-navigation .brand { order: 1 !important; min-width: 0 !important; }
+  .sidebar.top-navigation .nav-account-actions,
+  .sidebar.top-navigation .topbar-actions { order: 2 !important; width: 100% !important; display: flex !important; flex-wrap: wrap; gap: 8px !important; }
+  .sidebar.top-navigation .top-nav-menu { order: 3 !important; }
+
+  .sidebar.top-navigation .brand h2 { font-size: 17px !important; margin: 0 0 2px !important; }
+  .sidebar.top-navigation .brand span { font-size: 11px !important; }
+  .sidebar.top-navigation .logo.logo-image-mark { width: 42px; height: 42px; }
+
+  /* Actions row: bell + credits pill + profile, compact and wrap-safe */
+  .sidebar.top-navigation .notification-bell { flex: 0 0 auto; }
+  .sidebar.top-navigation .credit-balance {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 8px 10px !important;
+  }
+  .sidebar.top-navigation .credit-balance-copy span { font-size: 9px !important; }
+  .sidebar.top-navigation .credit-balance-copy strong { font-size: 12px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar.top-navigation .profile-shortcut {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 50%;
+    padding: 4px 10px 4px 4px !important;
+  }
+  .sidebar.top-navigation .profile-shortcut-copy strong { font-size: 12px !important; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .sidebar.top-navigation .profile-shortcut-copy small { display: none; }
+
+  /* Nav menu: visible horizontal pill scroller starting at left */
+  .sidebar.top-navigation .top-nav-menu {
+    display: flex !important;
+    flex-wrap: nowrap;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 2px 2px 6px !important;
+    scroll-padding-left: 4px;
+  }
+  .sidebar.top-navigation .top-nav-menu::-webkit-scrollbar { height: 0; display: none; }
+  .sidebar.top-navigation .top-nav-menu button {
+    flex: 0 0 auto;
+    min-width: max-content;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    border-radius: 999px !important;
+  }
+  .sidebar.top-navigation .nav-search-icon-only {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    flex: 0 0 36px;
+  }
+  .sidebar.top-navigation .nav-search-icon-only svg { width: 22px; height: 22px; }
+
+  /* Avoid horizontal page scroll caused by wide children */
+  html, body, #root { overflow-x: hidden; }
+  .main { padding: 14px !important; }
+
+  /* Settings tabs: allow scroll and full visibility */
+  .settings-tabs, .tabs { overflow-x: auto; flex-wrap: nowrap !important; }
+  .settings-tabs::-webkit-scrollbar, .tabs::-webkit-scrollbar { display: none; height: 0; }
+  .settings-tabs button, .tabs button { flex: 0 0 auto; white-space: nowrap; }
+
+  /* Session/person cards: prevent badge overlap */
+  .person-card, .session-mini { flex-wrap: wrap; }
+}
+
+@media (max-width: 420px) {
+  .sidebar.top-navigation .credit-balance-copy span { display: none; }
+  .sidebar.top-navigation .profile-shortcut-copy strong { max-width: 70px; }
+  .sidebar.top-navigation .top-nav-menu button { font-size: 12px !important; padding: 7px 10px !important; }
+}
