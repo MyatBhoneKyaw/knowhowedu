@@ -83,13 +83,22 @@ function normalizeBackendUser(apiUser, wallet) {
 function profileRowToApiUser(row, roleRow) {
   if (!row) return null;
   const profile = row.profile || {};
+  const sysRole = roleRow?.role;
+  const rawRole = row.raw_role;
+  // Admin from user_roles always wins. Otherwise prefer the granular raw_role
+  // (e.g. teacher, assistant_teacher) over the basic 'user' enum value.
+  let role;
+  if (sysRole === 'admin') role = 'admin';
+  else if (rawRole && rawRole !== 'learner') role = rawRole;
+  else role = sysRole || rawRole || 'learner';
   return {
     _id: row.id,
     id: row.id,
     fullName: row.full_name,
     username: row.username,
     email: row.email,
-    role: roleRow?.role || row.raw_role || 'learner',
+    role,
+    rawRole: rawRole || 'learner',
     profile,
     learningProfile: row.learning_profile || {},
     teachingProfile: row.teaching_profile || {},
@@ -252,12 +261,16 @@ async function cloudReviewApplication(id, body) {
     .maybeSingle();
   if (error) throw new Error(error.message);
   // On approval, promote the applicant's role on their profile so the app
-  // recognizes them as a teacher (raw_role stores the granular role string).
+  // recognizes them as a teacher (raw_role stores the granular role string),
+  // and reflect the approval in teaching_profile so UI gates flip immediately.
   if (data && body.status === 'approved') {
     const nextRole = data.requested_role === 'teacher' ? 'teacher' : (data.requested_role || 'assistant_teacher');
+    const niceLabel = nextRole === 'teacher' ? 'Teacher' : nextRole === 'assistant_teacher' ? 'Assistant Teacher' : nextRole;
+    const { data: existing } = await supabase.from('profiles').select('teaching_profile').eq('id', data.user_id).maybeSingle();
+    const nextTeaching = { ...(existing?.teaching_profile || {}), level: niceLabel, applicationStatus: 'approved', licenseStatus: 'Approved' };
     const { error: roleErr } = await supabase
       .from('profiles')
-      .update({ raw_role: nextRole })
+      .update({ raw_role: nextRole, teaching_profile: nextTeaching })
       .eq('id', data.user_id);
     if (roleErr) throw new Error(roleErr.message);
   }
