@@ -4337,18 +4337,6 @@ function CommunityPage({ user, posts = [], setPosts = () => {} }) {
         {categories.map((category) => <button type="button" key={category} className={selectedCategory === category ? 'active' : ''} onClick={() => { setSelectedCategory(category); setActiveBoard('all'); }}>{category === 'All' ? 'All' : `# ${category.toLowerCase()}`}</button>)}
       </div>
 
-      <div className="community-directory-grid community-board-strip">
-        {visibleBoards.map((board) => {
-          const discussions = discussionCount(board);
-          return (
-            <article className={`community-directory-card ${activeBoard === board.id ? 'active' : ''}`} key={board.id} onClick={() => setActiveBoard(activeBoard === board.id ? 'all' : board.id)}>
-              <div className="community-directory-card-head"><span className="board-mark" style={{ background: board.gradient }}>{board.initial}</span><div><h3>k/{board.name}</h3><small>{board.title}</small></div></div>
-              <p>{board.description}</p>
-              <footer><span>{discussions} post{discussions === 1 ? '' : 's'}</span><span>{board.category}</span><b>{board.tag}</b></footer>
-            </article>
-          );
-        })}
-      </div>
 
       <div className="community-feed-list">
         {filteredPosts.length === 0 && <div className="card"><p className="muted-text">No posts match this search or filter yet.</p></div>}
