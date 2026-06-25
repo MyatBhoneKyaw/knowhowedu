@@ -4937,12 +4937,18 @@ function VideoPanelPage({ user, setUser }) {
     return purchasedVideos.includes(video.id);
   }
 
+  function openVideoWithAd(video) {
+    setPendingVideo(video);
+    setVideoAd(pickRandomAd());
+  }
+
   function claimOrBuy(video) {
     setVideoNotice('');
     if (isOwned(video)) {
-      setActiveVideo(video);
+      openVideoWithAd(video);
       return;
     }
+
     const currentCredits = Number(user.wallet?.current || 0);
     if (video.priceCredits > 0 && currentCredits < video.priceCredits) {
       setVideoNotice(`You need ${formatCredits(video.priceCredits)} credits to unlock this lecture.`);
