@@ -2801,6 +2801,8 @@ function SessionsPage({ user, setUser, sessions, setSessions, transactions, setT
   const [showDialog, setShowDialog] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
   const [activeMeeting, setActiveMeeting] = useState(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState(null);
+  const [rescheduleDraft, setRescheduleDraft] = useState({ date: '', time: '', durationMinutes: 30 });
   const [sessionSearch, setSessionSearch] = useState('');
   const [form, setForm] = useState({
     role: 'teaching',
