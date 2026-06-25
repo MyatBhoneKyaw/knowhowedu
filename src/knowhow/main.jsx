@@ -3071,18 +3071,42 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
 
   function purchase(product, cardLastFour = '') {
     setWalletNotice('');
-    const nextWallet = product.productType === 'lecture_video'
-      ? normalizeWallet({ ...wallet, lectureAccess: (wallet.lectureAccess || 0) + 1 })
-      : normalizeWallet({
-          ...wallet,
-          current: Number((wallet.current + product.credits).toFixed(2)),
-          purchased: Number(((wallet.purchased || 0) + product.credits).toFixed(2)),
-        });
+    let nextWallet;
+    if (product.productType === 'lecture_video') {
+      nextWallet = normalizeWallet({ ...wallet, lectureAccess: (wallet.lectureAccess || 0) + 1 });
+    } else if (product.productType === 'exchange') {
+      if (wallet.current < product.credits) {
+        setWalletNotice(`Not enough credits to exchange. You need ${product.credits}.`);
+        return;
+      }
+      nextWallet = normalizeWallet({
+        ...wallet,
+        current: Number((wallet.current - product.credits).toFixed(2)),
+        spent: Number(((wallet.spent || 0) + product.credits).toFixed(2)),
+      });
+    } else {
+      nextWallet = normalizeWallet({
+        ...wallet,
+        current: Number((wallet.current + product.credits).toFixed(2)),
+        purchased: Number(((wallet.purchased || 0) + product.credits).toFixed(2)),
+      });
+    }
     const nextUser = { ...user, wallet: nextWallet };
-    addTransaction('Purchase', product.title, product.productType === 'lecture_video' ? 0 : product.credits, nextUser);
-    const paidWith = cardLastFour ? ` Card ending ${cardLastFour} accepted.` : '';
-    setWalletNotice(product.productType === 'lecture_video' ? `Lecture video access added. Credit balance was not changed.${paidWith}` : `${product.credits} credits purchased successfully.${paidWith}`);
+    const txAmount = product.productType === 'lecture_video' ? 0
+      : product.productType === 'exchange' ? -product.credits
+      : product.credits;
+    const txType = product.productType === 'exchange' ? 'Exchange' : 'Purchase';
+    addTransaction(txType, product.title, txAmount, nextUser);
+    const paidWith = cardLastFour ? ` Card ending ${cardLastFour}.` : '';
+    if (product.productType === 'lecture_video') {
+      setWalletNotice(`Lecture video access added. Credit balance was not changed.${paidWith}`);
+    } else if (product.productType === 'exchange') {
+      setWalletNotice(`$${product.payout} deposited to card ending ${cardLastFour || '••••'}. ${product.credits} credits deducted.`);
+    } else {
+      setWalletNotice(`${product.credits} credits purchased successfully.${paidWith}`);
+    }
   }
+
 
   return (
     <section>
@@ -3136,20 +3160,24 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
         </div>
         <div className="card">
           <h3>Money Exchange</h3>
-          <p className="muted-text">Bulk credit packs at a discounted rate.</p>
+          <p className="muted-text">Convert your credits into cash deposited to your credit card.</p>
           <div className="list">
             {[
-              { id: 'exchange-100', title: '100 Credits', credits: 100, price: '$3' },
-              { id: 'exchange-200', title: '200 Credits', credits: 200, price: '$6' },
-              { id: 'exchange-300', title: '300 Credits', credits: 300, price: '$10' },
-            ].map((product) => (
-              <div className="skill-row" key={product.id}>
-                <div><strong>{product.title}</strong><span>{product.price} • {product.credits} credits</span></div>
-                <button className="primary" type="button" onClick={() => openPayment(product)}>Exchange</button>
-              </div>
-            ))}
+              { id: 'exchange-100', title: '100 Credits → $3', credits: 100, payout: 3, productType: 'exchange' },
+              { id: 'exchange-200', title: '200 Credits → $6', credits: 200, payout: 6, productType: 'exchange' },
+              { id: 'exchange-300', title: '300 Credits → $10', credits: 300, payout: 10, productType: 'exchange' },
+            ].map((product) => {
+              const insufficient = wallet.current < product.credits;
+              return (
+                <div className="skill-row" key={product.id}>
+                  <div><strong>{product.title}</strong><span>Pays ${product.payout} to your card • costs {product.credits} credits</span></div>
+                  <button className="primary" type="button" disabled={insufficient} onClick={() => openPayment(product)}>{insufficient ? 'Not enough' : 'Exchange'}</button>
+                </div>
+              );
+            })}
           </div>
         </div>
+
       </div>
       <div className="card">
 
@@ -3234,7 +3262,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
             </div>
             <div className="summary-box">
               <strong>{paymentProduct.title}</strong>
-              <span>{paymentProduct.price} - {paymentProduct.credits} credit{paymentProduct.credits === 1 ? '' : 's'}</span>
+              <span>{paymentProduct.productType === 'exchange' ? `Receive $${paymentProduct.payout} to your card • ${paymentProduct.credits} credits` : `${paymentProduct.price} - ${paymentProduct.credits} credit${paymentProduct.credits === 1 ? '' : 's'}`}</span>
             </div>
             <label>Name on Card</label>
             <input value={paymentDraft.name} onChange={(event) => setPaymentDraft({ ...paymentDraft, name: event.target.value })} placeholder="Cardholder name" autoComplete="cc-name" required />
