@@ -2282,7 +2282,7 @@ function useDailyRewardAvailable(userId) {
   return available;
 }
 
-function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery }) {
+function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery, unreadMessages = 0 }) {
   const items = [
     ['dashboard', 'Home'],
     ['community', 'Community'],
@@ -2313,11 +2313,15 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
             <line x1="20" y1="20" x2="16.5" y2="16.5" />
           </svg>
         </button>
-        {items.map(([key, label]) => (
-          <button key={key} className={page === key ? 'active' : ''} onClick={() => setPage(key)} title={label}>
-            {label}
-          </button>
-        ))}
+        {items.map(([key, label]) => {
+          const showDot = key === 'messages' && unreadMessages > 0;
+          return (
+            <button key={key} className={page === key ? 'active' : ''} onClick={() => setPage(key)} title={showDot ? `${label} (${unreadMessages} new)` : label} style={{ position: 'relative' }}>
+              {label}
+              {showDot && <span className="credit-balance-dot" aria-hidden="true" style={{ position: 'absolute', top: 4, right: 6 }} />}
+            </button>
+          );
+        })}
       </nav>
       <div className="topbar-actions nav-account-actions" aria-label="Account shortcuts">
         <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
