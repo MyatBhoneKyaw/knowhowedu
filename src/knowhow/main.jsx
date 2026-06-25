@@ -2029,7 +2029,7 @@ function App() {
   return (
     <div className={`app ${user.theme === 'dark' ? 'dark' : ''}`}>
       {authToast && <SuccessToast message={authToast} />}
-      <Sidebar page={page} setPage={setPage} user={user} level={level} navSearchQuery={navSearchQuery} setNavSearchQuery={setNavSearchQuery} />
+      <Sidebar page={page} setPage={setPage} user={user} level={level} navSearchQuery={navSearchQuery} setNavSearchQuery={setNavSearchQuery} unreadMessages={messages.filter((m) => m.unread).length} />
       <main className="main main-with-nav-actions">
         {pages[page]}
       </main>
