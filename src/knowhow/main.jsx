@@ -1241,9 +1241,9 @@ const LECTURE_VIDEOS = [
 const LOAN_POLICY = {
   min: 0.5,
   maxOutstanding: 5,
-  maxSingleLoan: 3,
+  maxSingleLoan: 5,
   minDays: 7,
-  maxDays: 30,
+  maxDays: 7,
 };
 
 const TEACHING_ALLOWED_ROLES = ['assistant_teacher', 'teacher', 'community_mentor', 'administrator'];
@@ -2728,7 +2728,7 @@ function WalletPage({ user, setUser, transactions, setTransactions }) {
       <div className="two-col">
         <div className="card">
           <h3>Loan Credit</h3>
-          <p className="muted-text">Loan limit: max {LOAN_POLICY.maxSingleLoan} credits per request and max {LOAN_POLICY.maxOutstanding} credits outstanding. Return period must be {LOAN_POLICY.minDays}-{LOAN_POLICY.maxDays} days.</p>
+          <p className="muted-text">Loan limit: max {LOAN_POLICY.maxOutstanding} credits outstanding. Return period is {LOAN_POLICY.minDays} days.</p>
           <div className="form-grid two">
             <div><label>Amount</label><input type="number" min={LOAN_POLICY.min} max={Math.min(LOAN_POLICY.maxSingleLoan, remainingLoanLimit)} step="0.5" value={loanAmount} onChange={(event) => setLoanAmount(event.target.value)} /></div>
             <div><label>Return in days</label><input type="number" min={LOAN_POLICY.minDays} max={LOAN_POLICY.maxDays} value={loanDays} onChange={(event) => setLoanDays(event.target.value)} /></div>
