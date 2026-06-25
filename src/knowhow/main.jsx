@@ -5041,14 +5041,30 @@ function SettingsPage({ user, setUser, onLogout }) {
             <span className="pill muted">Current: {subscriptionPlan}</span>
           </div>
           <div className="subscription-plan-grid">
-            {plans.map((plan) => (
-              <button key={plan.name} type="button" className={subscriptionPlan === plan.name ? 'subscription-card active' : 'subscription-card'} onClick={() => { setSubscriptionPlan(plan.name); setSettingsNotice(`${plan.name} subscription selected.`); }}>
-                <span>{plan.name}</span>
-                <strong>{plan.price}</strong>
-                <small>{plan.note}</small>
-                <ul>{plan.perks.map((perk) => <li key={perk}>✓ {perk}</li>)}</ul>
-              </button>
-            ))}
+            {plans.map((plan) => {
+              const isActive = subscriptionPlan === plan.name;
+              const isPaid = plan.name !== 'Free';
+              const handlePurchase = () => {
+                if (isPaid && paymentMethods.length === 0) {
+                  setSettingsNotice('Add a payment method to subscribe to Premium.');
+                  setPaymentModal({ mode: 'add', index: -1, draft: { brand: 'Visa', holder: '', last4: '', expiry: '' } });
+                  return;
+                }
+                setSubscriptionPlan(plan.name);
+                setSettingsNotice(isPaid ? `${plan.name} subscription activated — ${plan.price} charged to •••• ${paymentMethods[0]?.last4 || '----'}.` : 'Switched to Free plan.');
+              };
+              return (
+                <div key={plan.name} role="group" className={isActive ? 'subscription-card active' : 'subscription-card'}>
+                  <span>{plan.name}</span>
+                  <strong>{plan.price}</strong>
+                  <small>{plan.note}</small>
+                  <ul>{plan.perks.map((perk) => <li key={perk}>✓ {perk}</li>)}</ul>
+                  <button type="button" className="primary" style={{ marginTop: 12, width: '100%' }} onClick={handlePurchase} disabled={isActive}>
+                    {isActive ? 'Current Plan' : (isPaid ? `Purchase ${plan.price}` : 'Switch to Free')}
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <div className="settings-sub-card premium-benefits-card">
             <h3>Premium Benefits</h3>
