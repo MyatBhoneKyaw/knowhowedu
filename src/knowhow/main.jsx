@@ -1855,6 +1855,55 @@ function App() {
     return () => { cancelled = true; };
   }, [loggedIn]);
 
+  // Sync direct messages with the cloud so conversations appear for both sides.
+  useEffect(() => {
+    if (!loggedIn || !user?.id) return undefined;
+    let cancelled = false;
+    async function syncMessages() {
+      try {
+        const rows = await apiRequest('/messages');
+        if (cancelled || !Array.isArray(rows)) return;
+        const peopleById = new Map(cloudPeople.map((p) => [p.id, p]));
+        const mapped = rows
+          .filter((r) => r && r.id && (r.senderId === user.id || r.recipientId === user.id))
+          .map((r) => {
+            const isOutgoing = r.senderId === user.id;
+            const otherId = isOutgoing ? r.recipientId : r.senderId;
+            const other = peopleById.get(otherId);
+            const otherName = other?.fullName || r.groupName || 'Member';
+            const otherUsername = other?.username || (otherName || '').toLowerCase().replace(/\s+/g, '');
+            const t = new Date(r.createdAt || Date.now());
+            const time = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return {
+              id: r.id,
+              name: otherName,
+              username: otherUsername,
+              type: r.messageType === 'community' ? 'Community message' : 'Private message',
+              body: r.body || '',
+              attachment: r.attachments || null,
+              time,
+              direction: isOutgoing ? 'outgoing' : 'incoming',
+              unread: !isOutgoing && !r.readAt,
+              delivered: true,
+              cloudId: r.id,
+              createdAt: r.createdAt,
+            };
+          });
+        setMessages((current) => {
+          const cloudIds = new Set(mapped.map((m) => m.id));
+          const localOnly = (current || []).filter((m) => !cloudIds.has(m.id) && !m.cloudId);
+          const merged = [...localOnly, ...mapped].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+          localStorage.setItem('knowhow-messages', JSON.stringify(merged));
+          return merged;
+        });
+      } catch (err) { /* ignore */ }
+    }
+    syncMessages();
+    const id = setInterval(syncMessages, 8000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [loggedIn, user?.id, cloudPeople]);
+
+
   // Load active sessions from the cloud so every signed-in user sees teacher-created sessions.
   useEffect(() => {
     if (!loggedIn) return undefined;
