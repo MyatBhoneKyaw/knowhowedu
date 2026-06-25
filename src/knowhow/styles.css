@@ -57,7 +57,7 @@ nav button:hover, nav button.active { background: var(--primary); color: white; 
 .hero { display: flex; justify-content: space-between; align-items: center; gap: 24px; min-height: 230px; background: linear-gradient(135deg, rgba(103,89,255,.95), rgba(18,194,233,.85)); color: white; overflow: hidden; position: relative; }
 .hero p, .hero .eyebrow { color: rgba(255,255,255,.88); }
 .hero h2 { font-size: 38px; max-width: 760px; margin: 0; }
-.credit-orb { min-width: 190px; height: 190px; border-radius: 999px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); display: grid; place-items: center; text-align: center; }
+.credit-orb { min-width: 190px; height: 190px; border-radius: 999px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
 .credit-orb span { display: block; font-size: 46px; font-weight: 900; }
 .credit-orb small { display: block; }
 
