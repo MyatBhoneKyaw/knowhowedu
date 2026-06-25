@@ -1886,13 +1886,33 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    async function hydrateFromSupabase() {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (!accessToken) return false;
+        localStorage.setItem('knowhow-token', accessToken);
+        const me = await apiRequest('/auth/me');
+        if (cancelled) return true;
+        const normalized = normalizeBackendUser(me.user, me.wallet);
+        const nextUser = { ...normalized, wallet: normalizeWallet(normalized.wallet) };
+        setUser(nextUser);
+        saveState(nextUser, sessions, transactions);
+        setLoggedIn(true);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     async function loadCurrentUser() {
       const token = localStorage.getItem('knowhow-token');
       if (!token) {
-        setAuthLoading(false);
+        const hydrated = await hydrateFromSupabase();
+        if (!cancelled) setAuthLoading(false);
         return;
       }
-
       try {
         const data = await apiRequest('/auth/me');
         const normalized = normalizeBackendUser(data.user, data.wallet);
@@ -1903,13 +1923,29 @@ function App() {
       } catch (error) {
         localStorage.removeItem('knowhow-token');
         localStorage.removeItem('knowhow-user');
-        setLoggedIn(false);
+        const hydrated = await hydrateFromSupabase();
+        if (!hydrated && !cancelled) setLoggedIn(false);
       } finally {
-        setAuthLoading(false);
+        if (!cancelled) setAuthLoading(false);
       }
     }
 
     loadCurrentUser();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.access_token) {
+        hydrateFromSupabase();
+      }
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('knowhow-token');
+        localStorage.removeItem('knowhow-user');
+        setLoggedIn(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2197,22 +2233,16 @@ function AuthScreen({ onAuthSuccess }) {
                 hasTokens: !!result?.tokens,
                 hasError: !!result?.error,
                 errorMessage: result?.error?.message,
-                errorName: result?.error?.name,
               });
-              if (result?.tokens) {
-                try {
-                  const { data: userData, error: userErr } = await supabase.auth.getUser();
-                  logOAuth('profile:getUser', {
-                    userId: userData?.user?.id,
-                    email: userData?.user?.email,
-                    provider: userData?.user?.app_metadata?.provider,
-                    errorMessage: userErr?.message,
-                  });
-                } catch (err) {
-                  logOAuth('profile:getUser:throw', { message: err?.message, name: err?.name });
-                }
-              }
-              if (result?.error) setError(result.error.message || 'Google sign-in failed');
+              if (result?.error) { setError(result.error.message || 'Google sign-in failed'); return; }
+              if (result?.redirected) return; // full-page redirect in progress
+              // Tokens received & session set — finish sign-in inside the app
+              const { data: sessionData } = await supabase.auth.getSession();
+              const accessToken = sessionData?.session?.access_token;
+              if (!accessToken) { setError('Google sign-in did not return a session.'); return; }
+              localStorage.setItem('knowhow-token', accessToken);
+              const me = await apiRequest('/auth/me');
+              onAuthSuccess({ token: accessToken, user: me.user, wallet: me.wallet, authAction: 'login' });
             } catch (err) {
               logOAuth('signInWithOAuth:throw', { message: err?.message, name: err?.name, stack: err?.stack });
               setError(err?.message || 'Google sign-in failed');
