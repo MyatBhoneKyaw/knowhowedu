@@ -4539,6 +4539,8 @@ function ProfilePage({ user, setUser, level, teacherApplications, setTeacherAppl
 function SettingsPage({ user, setUser, onLogout }) {
   const [activeSection, setActiveSection] = useState('security');
   const [settingsSearch, setSettingsSearch] = useState('');
+  const [language, setLanguage] = useState(() => (typeof window !== 'undefined' && window.localStorage.getItem('knowhow-language')) || 'English');
+
   const [draft, setDraft] = useState({
     theme: user.theme || 'light',
     privacy: user.privacy || 'Community visible',
@@ -4613,9 +4615,10 @@ function SettingsPage({ user, setUser, onLogout }) {
     { id: 'billing', label: 'Payment Info', icon: '💳' },
     { id: 'subscription', label: 'Subscription', icon: '⭐' },
     { id: 'appearance', label: 'Appearance', icon: '👁️' },
-    
+    { id: 'language', label: 'Language', icon: '🌐' },
     { id: 'support', label: 'Help and Support', icon: '?' },
     { id: 'about', label: 'About', icon: 'i' },
+
   ];
 
   const filteredSections = sections.filter((item) => item.label.toLowerCase().includes(settingsSearch.toLowerCase().trim()));
@@ -4883,6 +4886,31 @@ function SettingsPage({ user, setUser, onLogout }) {
         </div>
       );
     }
+    if (activeSection === 'language') {
+      return (
+        <div className="settings-panel-card">
+          <h2>Language</h2>
+          <p className="muted-text">Choose your preferred display language.</p>
+          <label htmlFor="settings-language">Language</label>
+          <select
+            id="settings-language"
+            value={language}
+            onChange={(event) => {
+              const next = event.target.value;
+              setLanguage(next);
+              try { window.localStorage.setItem('knowhow-language', next); } catch (_) {}
+              setSettingsNotice(`Language set to ${next}.`);
+            }}
+          >
+            <option value="English">English</option>
+            <option value="Myanmar">Myanmar (မြန်မာ)</option>
+            <option value="Chinese">Chinese (中文)</option>
+          </select>
+          <p className="muted-text" style={{ marginTop: 12 }}>Current: <strong>{language}</strong></p>
+        </div>
+      );
+    }
+
 
 
 
