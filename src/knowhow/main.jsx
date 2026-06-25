@@ -2325,6 +2325,7 @@ function Sidebar({ page, setPage, user, level, navSearchQuery, setNavSearchQuery
         })}
       </nav>
       <div className="topbar-actions nav-account-actions" aria-label="Account shortcuts">
+        <NotificationBell userId={user.id} sessions={sessions} />
         <button className={`credit-balance${dailyAvailable ? ' has-reward' : ''}`} type="button" onClick={() => setPage('wallet')} title={dailyAvailable ? 'Daily reward available — open wallet' : 'Open credit wallet'}>
           {dailyAvailable && <span className="credit-balance-dot" aria-hidden="true" />}
           <span className="credit-balance-icon" aria-hidden="true">◎</span>
