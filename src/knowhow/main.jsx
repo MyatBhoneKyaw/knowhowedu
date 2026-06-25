@@ -1861,7 +1861,7 @@ function App() {
     let cancelled = false;
     async function syncMessages() {
       try {
-        const rows = await apiRequest('/messages');
+        const rows = await apiRequest('/messages/threads');
         if (cancelled || !Array.isArray(rows)) return;
         const peopleById = new Map(cloudPeople.map((p) => [p.id, p]));
         const mapped = rows
