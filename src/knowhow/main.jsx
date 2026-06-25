@@ -1443,6 +1443,83 @@ function getSessionRoom(session) {
   return session.roomId || session.meetingRoomId || '';
 }
 
+// ============== Ads system ==============
+const AD_LIBRARY = [
+  {
+    id: 'ad-skillbridge',
+    sponsor: 'SkillBridge',
+    title: 'Level up faster with SkillBridge',
+    body: 'Personalized learning paths curated by top mentors. Try 7 days free.',
+    cta: 'Start free trial',
+    url: 'https://example.com/skillbridge',
+    color: '#3b82f6',
+  },
+  {
+    id: 'ad-notebloom',
+    sponsor: 'NoteBloom',
+    title: 'Smarter notes for serious learners',
+    body: 'Capture lecture highlights, sync flashcards, and review in seconds.',
+    cta: 'Get NoteBloom',
+    url: 'https://example.com/notebloom',
+    color: '#10b981',
+  },
+  {
+    id: 'ad-focusbean',
+    sponsor: 'FocusBean Coffee',
+    title: 'Fuel your study streaks',
+    body: 'Single-origin beans, delivered fresh. 15% off your first bag with KNOWHOW15.',
+    cta: 'Shop FocusBean',
+    url: 'https://example.com/focusbean',
+    color: '#f59e0b',
+  },
+  {
+    id: 'ad-lingomate',
+    sponsor: 'LingoMate',
+    title: 'Practice 30+ languages with AI tutors',
+    body: 'Real conversations, instant corrections. Pairs perfectly with Know-how sessions.',
+    cta: 'Try LingoMate',
+    url: 'https://example.com/lingomate',
+    color: '#8b5cf6',
+  },
+];
+
+function pickRandomAd() {
+  return AD_LIBRARY[Math.floor(Math.random() * AD_LIBRARY.length)];
+}
+
+function AdOverlay({ ad, placement = 'Sponsored', onClose, skipAfter = 5 }) {
+  const [remaining, setRemaining] = useState(skipAfter);
+  useEffect(() => {
+    if (remaining <= 0) return undefined;
+    const t = setTimeout(() => setRemaining((r) => r - 1), 1000);
+    return () => clearTimeout(t);
+  }, [remaining]);
+  if (!ad) return null;
+  const canSkip = remaining <= 0;
+  return (
+    <div className="modal-backdrop high-modal-backdrop" style={{ zIndex: 2000 }}>
+      <div className="modal card" style={{ maxWidth: 480, padding: 0, overflow: 'hidden' }}>
+        <div style={{ background: ad.color, color: '#fff', padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <small style={{ opacity: 0.9, letterSpacing: 0.5, textTransform: 'uppercase', fontSize: 11 }}>{placement} · Ad</small>
+          <small style={{ opacity: 0.9 }}>{ad.sponsor}</small>
+        </div>
+        <div style={{ padding: 20, display: 'grid', gap: 10 }}>
+          <h3 style={{ margin: 0 }}>{ad.title}</h3>
+          <p className="muted-text" style={{ margin: 0 }}>{ad.body}</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, gap: 8 }}>
+            <a className="primary" style={{ textDecoration: 'none', padding: '8px 14px', borderRadius: 8, background: ad.color, color: '#fff' }} href={ad.url} target="_blank" rel="noopener noreferrer">{ad.cta}</a>
+            <button type="button" className="ghost" onClick={onClose} disabled={!canSkip} style={{ opacity: canSkip ? 1 : 0.6 }}>
+              {canSkip ? 'Skip ad ✕' : `Skip in ${remaining}s`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
 function getParticipantRole(session, user) {
   if (session.teacherId && user.id && session.teacherId === user.id) return 'mentor';
   if (session.learnerId && user.id && session.learnerId === user.id) return 'learner';
